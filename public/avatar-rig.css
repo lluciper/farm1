@@ -1,0 +1,68 @@
+/* The player puppet, pets and herds: painted artwork posed every frame by avatar-world.js (pig drawn by avatar-rig.js). */
+
+/* The player: positioned by transform (sub-pixel smooth), anchored at the feet; same box as the original artwork. */
+html.avatar-world .game .world .avatar{left:0!important;top:0!important;bottom:auto!important;margin:0!important;width:84px!important;height:105px!important;transform:translate3d(var(--ar-x,0px),var(--ar-y,0px),0) translate(-50%,-100%) scale(var(--ar-s,1))!important;transform-origin:50% 100%!important;transition:none!important;animation:none!important;filter:none!important;will-change:transform}
+@media(max-width:650px){html.avatar-world .game .world .avatar{width:64px!important;height:80px!important}}
+html.avatar-world .avatar .player-rig,html.avatar-world .avatar::before{display:none!important}
+html.avatar-world .avatar #playerLabel{z-index:3;top:-2px}
+.ar-player{position:absolute;inset:0;pointer-events:none}
+/* Puppet parts: full-frame copies of the 320×400 layers, each clipped to one part and turned about its joint. */
+.pp,.pp-group,.pp-part{position:absolute;inset:0}
+.pp{transform-origin:50% 94%;will-change:transform;filter:drop-shadow(0 1px 1px #4a32182e)}
+.pp-part{background-size:100% 100%;background-repeat:no-repeat;background-position:center}
+.pp-part[hidden]{display:none}
+.pp-shadow{position:absolute;left:22%;right:22%;top:89.5%;height:8%;border-radius:50%;background:radial-gradient(ellipse,#3b2a124d 0 42%,#3b2a1200 72%)}
+
+/* Pets walk in their own layer (no z-index, so each pet can go in front of or behind the player). */
+.ar-pets{position:absolute;inset:0;pointer-events:none}
+.ar-pets[hidden]{display:none}
+.ar-pet{position:absolute;left:0;top:0;will-change:transform;transform-origin:50% 100%}
+.ar-pet>svg,.ar-pet>img{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 1px #46351f36)}
+html.avatar-world .farm-pet{display:none!important}
+
+/* Painted animals are posed by script: switch off the old looping CSS walks. */
+html.avatar-world [data-critter],html.avatar-world [data-critter] .cr-rig,html.avatar-world [data-critter] image,html.avatar-world .herd-animal{animation:none!important}
+svg[data-critter],svg.ar-animal{overflow:visible}
+html.avatar-world svg.ar-animal{animation:none!important}
+.herd svg[data-critter],.herd svg.ar-animal{will-change:transform}
+
+/* A puff of dust at each footfall while walking fast. */
+.ar-dust{position:absolute;width:16px;height:9px;margin:-5px 0 0 -8px;border-radius:50%;background:radial-gradient(ellipse,#dccaa4d9 0 38%,#dccaa400 72%);pointer-events:none;z-index:3;animation:ar-dust .62s ease-out forwards}
+@keyframes ar-dust{0%{transform:translate(0,0) scale(calc(.5 * var(--s,1)));opacity:.9}100%{transform:translate(var(--dx,0px),-7px) scale(calc(1.9 * var(--s,1)));opacity:0}}
+@media(prefers-reduced-motion:reduce){.ar-dust{display:none}}
+
+/* Still paper-doll pictures (wardrobe, shoes, hair): back hair, legs, shoes, body over the shoes' tops, front hair. */
+.modular-character .hair-back{z-index:0}.modular-character .doll-legs{z-index:1}.modular-character .preview-shoes{z-index:2}.modular-character .body-layer{z-index:3}.modular-character .hair-layer{z-index:4}
+.rig-preview .doll-legs,.rig-preview>img:first-child{z-index:1}.rig-preview .preview-shoes{z-index:2}.rig-preview .doll-upper{z-index:3}
+
+/* 3D pictures (world3d.js): the canvas covers the element and the painted picture under it is hidden. */
+.c3d-on>:not(.w3d-view){visibility:hidden}
+.w3d-view{z-index:5}
+.character-picker .c3d-pick{position:relative;display:block;width:156px;max-width:100%;height:195px}
+.character-picker .c3d-pick>img{width:100%;height:100%}
+.pet-card>.pet-art{grid-row:1/3;position:relative;display:block;width:82px;height:82px}
+.pet-art>img{width:100%;height:100%;object-fit:contain}
+.lake-fisher>img{display:block;width:100%;height:100%;object-fit:contain}
+.seated-character[data-c3d]{position:relative}
+html.avatar-world .avatar.is-3d #playerLabel{top:-16%}
+@media(max-width:650px){.character-picker .c3d-pick{height:155px;width:124px}.pet-card>.pet-art{width:62px;height:62px}}
+
+/* Pets' speech bubbles: a layer above the player; each anchor sits just above its pet's head. */
+.ar-pet-tips{position:absolute;inset:0;pointer-events:none;z-index:40}
+.ar-pet-tips[hidden]{display:none}
+.pet-tip-anchor{position:absolute;left:0;top:0;width:0;height:0;will-change:transform}
+.pet-tip-anchor>.pet-tip{bottom:0}
+
+/* Phones: the farm background is the map. The whole farm picture is shown at its own 3:2 shape, large enough that the
+   plot grid (same columns as on a computer) fits on its lawn with comfortable 76px plots; the plots are pinned to the
+   lawn, the view scrolls both ways and the camera follows the player (avatar-world.js). */
+@media(max-width:650px){
+html.xom.avatar-world .game:has(.zone-farm) .stage{container-type:size;overflow:auto;overscroll-behavior:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+html.xom.avatar-world .game:has(.zone-farm) .stage::-webkit-scrollbar{display:none}
+html.xom.avatar-world .game .world.zone-farm{--mcell:76px;--fc:var(--field-cols,4);--fr:var(--field-rows,3);--gw:calc(var(--fc) * var(--mcell) + (var(--fc) - 1) * 6px);--gh:calc(var(--fr) * var(--mcell) * .84 + (var(--fr) - 1) * 6px);
+  width:max(100cqw,150cqh,calc(var(--gw) / .58),calc(var(--gh) / .48 * 1.5));height:auto;aspect-ratio:3/2;min-height:0;max-width:none;flex:none;overflow:clip}
+html.xom.avatar-world .game .world.zone-farm .scenery{object-fit:fill}
+html.xom.avatar-world .game .world.zone-farm .plots-progressive{--cols:var(--fc);--rows:var(--fr);--cell:var(--mcell);width:var(--gw);height:var(--gh);left:51.5%;top:53%;transform:translate(-50%,-50%);gap:6px;grid-template-columns:repeat(var(--fc),minmax(0,1fr));grid-template-rows:repeat(var(--fr),minmax(0,1fr))}
+html.xom.avatar-world .game .world.zone-farm .plots-progressive .plot small{font-size:11px;max-width:94%}
+html.xom.avatar-world .game .world.zone-farm .plots-progressive .plot .status{font-size:15px}
+}

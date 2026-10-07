@@ -1,0 +1,7 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+for(const height of [360,568,768,907,1080])for(const zone of ['home','cafe','beauty','karaoke','street','farm']){
+ const props={},classes={},header={getBoundingClientRect:()=>({bottom:87})},nav={getBoundingClientRect:()=>({bottom:146})},chatHeader={getBoundingClientRect:()=>({bottom:650})};let observed=[];
+ const ctx={s:{zone},innerHeight:height,requestAnimationFrame:()=>{},MutationObserver:class{observe(){}},ResizeObserver:class{observe(el){observed.push(el)}},window:{addEventListener(){},visualViewport:{height,addEventListener(){}}},document:{addEventListener(){},documentElement:{classList:{toggle:(k,v)=>classes[k]=v},style:{setProperty:(k,v)=>props[k]=v}},querySelector:selector=>selector==='.game > header'?header:chatHeader,getElementById:k=>k==='zoneNav'?nav:{}}};
+ vm.createContext(ctx);vm.runInContext(fs.readFileSync('public/venue-layout.js','utf8'),ctx);assert.equal(classes['venue-layout'],zone!=='farm');if(zone!=='farm'){const top=parseFloat(props['--venue-top']),h=parseFloat(props['--venue-height']);assert.equal(top,Math.min(158,height*.4));assert(top+h<=height-11);assert(observed.includes(header));assert(!observed.includes(chatHeader));if(zone==='street'){const panel=Math.min(780,h),centre=top+h/2;assert(centre-panel/2>=top-1);assert(centre+panel/2<=height-11)}}
+}
+console.log('PASS: the game header, not earlier chat headers, controls navigation clearance; park/venues fit phone and desktop heights; centred park bounds stay in the available viewport.');

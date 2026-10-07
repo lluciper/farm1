@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs>
+<linearGradient id="soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0cd85"/><stop offset=".55" stop-color="#d9a55c"/><stop offset="1" stop-color="#b47a3c"/></linearGradient>
+<linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a9d860"/><stop offset=".5" stop-color="#6fae3e"/><stop offset="1" stop-color="#3f7a26"/></linearGradient>
+<linearGradient id="leafDark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6fb14a"/><stop offset=".55" stop-color="#3f8a2e"/><stop offset="1" stop-color="#245a1c"/></linearGradient>
+<linearGradient id="leafLight" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e2f5a6"/><stop offset=".5" stop-color="#b3df6b"/><stop offset="1" stop-color="#6fae3e"/></linearGradient>
+<linearGradient id="leafPurple" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b878b0"/><stop offset=".55" stop-color="#7d3f7f"/><stop offset="1" stop-color="#4f2552"/></linearGradient>
+<radialGradient id="red" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ff8a72"/><stop offset=".5" stop-color="#d8392b"/><stop offset="1" stop-color="#9a1f1a"/></radialGradient>
+<radialGradient id="cherry" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ff7a82"/><stop offset=".55" stop-color="#c62f37"/><stop offset="1" stop-color="#7d1420"/></radialGradient>
+<radialGradient id="orange" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffc06a"/><stop offset=".55" stop-color="#ef7a2a"/><stop offset="1" stop-color="#b94a14"/></radialGradient>
+<radialGradient id="gacFruit" cx=".38" cy=".3" r=".85"><stop offset="0" stop-color="#ffa060"/><stop offset=".5" stop-color="#ee4a22"/><stop offset="1" stop-color="#a51e14"/></radialGradient>
+<radialGradient id="unripe" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#e3f39a"/><stop offset=".55" stop-color="#9cc24a"/><stop offset="1" stop-color="#5d8a2a"/></radialGradient>
+<linearGradient id="cucumber" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2f6b22"/><stop offset=".45" stop-color="#5fa83a"/><stop offset=".7" stop-color="#7fc04a"/><stop offset="1" stop-color="#2f6b22"/></linearGradient>
+<linearGradient id="bamboo" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#a07834"/><stop offset=".45" stop-color="#e3c27a"/><stop offset="1" stop-color="#9a7230"/></linearGradient>
+<linearGradient id="trunk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6e4422"/><stop offset=".45" stop-color="#b07a44"/><stop offset="1" stop-color="#6a3f1e"/></linearGradient>
+<radialGradient id="coconut" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#cfe08a"/><stop offset=".55" stop-color="#8fae42"/><stop offset="1" stop-color="#55702a"/></radialGradient>
+<radialGradient id="tuber" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#e48ab8"/><stop offset=".5" stop-color="#b0457a"/><stop offset="1" stop-color="#6e2650"/></radialGradient>
+<radialGradient id="petal" cx=".5" cy=".9" r="1"><stop offset="0" stop-color="#fff2f5"/><stop offset=".45" stop-color="#ffc2d4"/><stop offset="1" stop-color="#e45d8c"/></radialGradient>
+<linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fe0f0"/><stop offset="1" stop-color="#3e9fc4"/></linearGradient>
+<linearGradient id="pod" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3c6a24"/><stop offset=".5" stop-color="#7fb244"/><stop offset="1" stop-color="#3c6a24"/></linearGradient>
+<linearGradient id="podDark" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1f2a18"/><stop offset=".5" stop-color="#4a5a34"/><stop offset="1" stop-color="#1f2a18"/></linearGradient>
+
+<radialGradient id="bean" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#b9875a"/><stop offset=".55" stop-color="#7a4a24"/><stop offset="1" stop-color="#43240f"/></radialGradient>
+<radialGradient id="grape" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#c9a0e8"/><stop offset=".5" stop-color="#7d3fb0"/><stop offset="1" stop-color="#43206a"/></radialGradient>
+<radialGradient id="blue" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#9fc0f0"/><stop offset=".5" stop-color="#3f63b8"/><stop offset="1" stop-color="#1f3170"/></radialGradient>
+<radialGradient id="melon" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#9fd86a"/><stop offset=".55" stop-color="#3f8a2e"/><stop offset="1" stop-color="#1f5a1c"/></radialGradient>
+<radialGradient id="pine" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffe08a"/><stop offset=".55" stop-color="#f0a83a"/><stop offset="1" stop-color="#b8661a"/></radialGradient>
+<radialGradient id="sun" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#ffe680"/><stop offset="1" stop-color="#f2a81e"/></radialGradient>
+<radialGradient id="seedHead" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="#8a5a30"/><stop offset="1" stop-color="#3f2410"/></radialGradient>
+<linearGradient id="weave" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3c27a"/><stop offset="1" stop-color="#a87a36"/></linearGradient>
+</defs><ellipse cx="50" cy="90" rx="34" ry="6" fill="#3b2a12" opacity=".16"/><g transform="translate(38 54) rotate(-28)"><ellipse rx="30" ry="15" fill="url(#tuber)" stroke="#5A3920" stroke-width="2.2"/><ellipse cx="-10" cy="-6" rx="10" ry="3.4" fill="#fff" opacity=".45"/><path d="M-30 2 l-8 3 M28 4 l8 4" stroke="#5A3920" stroke-width="1.5"/></g><g transform="translate(66 72) rotate(18)"><path d="M-24 0 C-24 -14 0 -16 4 -12 L8 14 C0 16 -24 14 -24 0Z" fill="url(#tuber)" stroke="#5A3920" stroke-width="2.2"/><ellipse cx="6" cy="1" rx="5" ry="13" fill="#ffd36a" stroke="#5A3920" stroke-width="1.8"/><ellipse cx="5" cy="-3" rx="2" ry="5" fill="#fff3b0"/></g></svg>

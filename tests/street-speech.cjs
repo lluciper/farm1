@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('public/street.js','utf8');const start=source.indexOf('const speechLife='),end=source.indexOf('\nconst online=',start);const paint=source.slice(source.indexOf('function paintSpeech(){'),source.indexOf('function paintList(){'));
+const now=Date.now(),text1={textContent:''},text2={textContent:''};function actor(code,text){const bubble={hidden:true,title:'',classList:{toggle(){}},style:{setProperty(){}},querySelector:()=>text};return {dataset:{streetPlayer:code},classList:{toggle(){}},querySelector:()=>bubble,bubble}}
+const a=actor('AAAA11112222',text1),b=actor('BBBB11112222',text2);let queued;
+const ctx={Date,Map,Infinity,Number,publicHistory:[{code:a.dataset.streetPlayer,text:'Xin chào <script>!',created:now-1000},{code:a.dataset.streetPlayer,text:'Tin mới nhất',created:now},{code:b.dataset.streetPlayer,text:'Tin đã cũ',created:now-20000}],data:{self:a.dataset.streetPlayer,players:[{code:a.dataset.streetPlayer,x:50},{code:b.dataset.streetPlayer,x:80}]},position:{x:50},s:{zone:'street'},document:{hidden:false},speechTimer:null,$:()=>({querySelectorAll:()=>[a,b]}),clearTimeout(){},setTimeout(fn,ms){queued={fn,ms};return 1}};
+vm.createContext(ctx);vm.runInContext(source.slice(start,end)+'\n'+paint+'\npaintSpeech();',ctx);
+assert.equal(a.bubble.hidden,false);assert.equal(text1.textContent,'Tin mới nhất');assert.equal(b.bubble.hidden,true);assert(queued.ms>11000&&queued.ms<=12050);
+ctx.publicHistory=[{code:b.dataset.streetPlayer,text:'<img onerror=alert(1)>',created:now}];vm.runInContext('paintSpeech()',ctx);assert.equal(a.bubble.hidden,true);assert.equal(b.bubble.hidden,false);assert.equal(text2.textContent,'<img onerror=alert(1)>');assert(!Object.hasOwn(b.bubble,'innerHTML'));
+ctx.publicHistory=[{code:b.dataset.streetPlayer,text:'x'.repeat(300),created:now}];vm.runInContext('paintSpeech()',ctx);assert.equal(text2.textContent.length,118);assert.equal(b.bubble.title.length,300);
+ctx.publicHistory=[];queued.fn();assert.equal(a.bubble.hidden,true);assert.equal(b.bubble.hidden,true);
+console.log('PASS: chat bubbles follow the sender identity, show only the latest recent shared message, expire, use safe text nodes and keep long messages bounded.');

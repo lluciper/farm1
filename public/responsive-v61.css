@@ -1,0 +1,64 @@
+/* Working surfaces fit the available viewport instead of the background art. */
+html,body{margin:0;max-width:100%;overscroll-behavior:none}.game{width:100%;height:100dvh;min-height:0;overflow:hidden}.stage{height:100%;width:100%}.home-scene,.xom .game .world .home-scene.venue-scene{box-sizing:border-box;position:absolute!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;width:min(1080px,calc(100% - 32px))!important;max-height:calc(100dvh - 150px)!important;overflow:auto!important;overscroll-behavior:contain;padding:20px!important}.home-heading{flex-wrap:wrap;gap:10px}.house-workspace{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:18px}.house-storage{min-width:0;max-height:65dvh;overflow:auto}.house-cutaway{width:100%;aspect-ratio:1.2;max-height:65dvh}.house-base{width:100%;height:100%;object-fit:contain}.furniture-drawing{width:100%;height:100%;object-fit:contain}.furniture-variant{display:inline-flex;align-items:center;justify-content:center}.service-menu,.service-jobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service-menu article,.service-jobs article{padding:16px;border-radius:16px;background:#fff;border:1px solid #e5dcc4}.cafe-orders .venue-picture{height:200px;max-width:620px;margin:auto}.cafe-orders .venue-picture>img{width:100%;height:100%;object-fit:contain}.missing{color:#b63e35}.enough{color:#357a40}button{touch-action:manipulation}.home-scene button,.service-menu button{min-height:42px}.home-scene p,.home-scene li{font-size:14px}.house-storage img{max-width:100%}
+@media(max-width:700px){.home-scene,.xom .game .world .home-scene.venue-scene{width:calc(100% - 16px)!important;max-height:calc(100dvh - 140px)!important;padding:12px!important}.house-workspace{grid-template-columns:1fr}.house-storage{max-height:240px}.house-cutaway{max-height:48dvh}.home-heading h2{font-size:20px}.home-toolbar{display:flex;flex-wrap:wrap;gap:6px}.service-menu,.service-jobs{grid-template-columns:1fr}.cafe-orders .venue-picture{height:150px}.quest-panel{max-width:calc(100% - 24px)}.play-bottom{max-width:calc(100% - 16px);bottom:max(6px,env(safe-area-inset-bottom))}.zone-nav{max-width:100%;overflow-x:auto;scrollbar-width:none}dialog{box-sizing:border-box;max-width:calc(100% - 16px);max-height:88dvh}.house-catalog,.furniture-catalog{grid-template-columns:repeat(2,minmax(0,1fr))}.house-catalog article,.furniture-catalog article{min-width:0}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.world.zone-home,.world.zone-cafe,.world.zone-beauty,.world.zone-karaoke{width:100%!important;height:100%!important;min-width:0!important;transform:none!important;aspect-ratio:auto!important}.furniture-product .furniture-drawing{height:100%;max-height:120px}.floor-slot .furniture-drawing{width:100%;height:100%}
+/* Venue panels occupy the viewport below navigation; painted-world sizing never clips them. */
+html.venue-layout .quest-panel,html.venue-layout .chicken-panel,html.venue-layout .play-bottom,html.venue-layout .zone-label,html.venue-layout .place{display:none!important}
+html.venue-layout .stage{position:fixed!important;inset:0!important;transform:none!important;width:100%!important;height:100dvh!important;overflow:hidden!important}
+html.venue-layout .game .world{position:absolute!important;inset:0!important;left:0!important;top:0!important;margin:0!important;transform:none!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;container-type:normal!important}
+html.venue-layout .game .world .home-scene,html.venue-layout .game .world .home-scene.venue-scene{position:absolute!important;left:50%!important;top:var(--venue-top,120px)!important;bottom:auto!important;transform:translateX(-50%)!important;width:min(1120px,calc(100% - 32px))!important;height:var(--venue-height,calc(100dvh - 144px))!important;min-height:0!important;max-height:none!important;overflow:auto!important;display:block!important;box-sizing:border-box!important;padding:16px!important;scroll-padding-top:72px}
+html.venue-layout .home-heading{position:sticky;top:-16px;background:#fff8e8;z-index:150;padding:12px 0;margin:0 0 12px;display:flex;align-items:center}
+html.venue-layout .venue-scene>*{grid-column:auto!important;grid-row:auto!important}
+html.venue-layout .venue-overview{display:grid!important;grid-template-columns:minmax(220px,40%) minmax(0,1fr);gap:20px}
+html.venue-layout .venue-picture{position:relative!important;top:auto!important;grid-row:auto!important;grid-column:auto!important;width:100%;height:clamp(180px,32vh,300px);margin:0 auto 16px!important}
+html.venue-layout .venue-picture>img{width:100%;height:100%;max-height:100%!important;object-fit:contain}
+html.venue-layout .house-cutaway{height:auto!important;min-height:0!important;max-height:none!important;aspect-ratio:1.2}
+html.venue-layout .house-display{min-height:0!important;overflow:visible!important}.house-workspace>*{min-width:0}
+@media(max-width:700px){html.venue-layout .game .world .home-scene,html.venue-layout .game .world .home-scene.venue-scene{width:calc(100% - 16px)!important;padding:12px!important}html.venue-layout .home-heading{top:-12px;gap:8px}html.venue-layout .venue-overview{grid-template-columns:1fr!important}html.venue-layout .venue-picture{height:180px}html.venue-layout .service-menu article{display:flex!important;flex-direction:column;align-items:stretch}html.venue-layout .service-menu article>*{grid-column:auto!important;grid-row:auto!important}html.venue-layout .house-storage{max-height:240px!important}}
+
+html.venue-layout .house-cutaway{width:min(100%,calc((var(--venue-height,600px) - 170px)*1.2))!important;margin-inline:auto!important}
+
+/* Low power: keep input and progress active, animate only meaningful actions. */
+.low-power .scenery{filter:none!important}.low-power .farm-pet,.low-power .herd-animal,.low-power .staff-art,.low-power .critter{animation:none!important}.low-power .world,.low-power .stage{backdrop-filter:none!important}.low-power .grow-bar{transition:none!important}
+html.game-hidden *,html.game-hidden *::before,html.game-hidden *::after{animation-play-state:paused!important}
+
+/* Phones: keep the decorative layers still. The drifting cloud shadows and flickering lamp halos are big blended
+   layers (mix-blend-mode) that make the GPU re-blend the whole scene every frame; fireflies and leaves loop too. */
+.low-power .world::before{animation:none!important}
+.low-power .xom-lamp .halo{animation:none!important}
+.low-power .xom-ambient{display:none}
+.low-power .xom-butterfly{animation:none!important;display:none}
+.low-power .herd-tip.tip-keep{animation:none!important}
+/* Weak phones: the 3D player draws its own ground shadow, so the CSS drop-shadow on its moving box (re-rasterised every
+   frame) goes; young crops stop swaying under their filters. */
+.low-power .avatar.is-3d{filter:none!important}
+.low-power .xom .plot .crop-img{animation:none!important}
+/* Field pages: shown as a small switcher on the top edge of the bottom bar instead of floating over the plots. */
+.world .field-pages{display:none!important}
+.field-pager{position:absolute;right:10px;bottom:calc(100% + 6px);display:flex;gap:4px;padding:4px;border-radius:14px;background:#fff8e8e6;border:2px solid #c4956a;box-shadow:0 2px 6px #4a321826;z-index:8;pointer-events:auto}
+.field-pager[hidden]{display:none}
+.field-pager button{min-height:32px;padding:4px 10px;border:0;border-radius:10px;background:transparent;color:#6b4a2a;font:inherit;font-size:13px;font-weight:800;white-space:nowrap}
+.field-pager button.active{background:#687a3c;color:#fff}
+.game:not(:has(.zone-farm)) .field-pager{display:none}
+@media(max-width:650px){.field-pager{right:6px;bottom:calc(100% + 4px)}.field-pager button{min-height:30px;padding:3px 8px;font-size:12px}}
+/* Farm zoom: + / − in the top-right corner under the zone bar (placed by avatar-world.js), only on the farm and only
+   when the field does not fit. */
+.farm-zoom{position:absolute;right:8px;top:120px;z-index:9;display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px;border-radius:16px;background:#fff8e8e6;border:2px solid #c4956a;box-shadow:0 2px 8px #4a321833;pointer-events:auto}
+.farm-zoom[hidden]{display:none}
+.farm-zoom button{width:40px;height:40px;border:0;border-radius:12px;background:#687a3c;color:#fff;font:900 24px/1 system-ui,sans-serif;display:grid;place-items:center;touch-action:manipulation}
+.farm-zoom button:disabled{background:#d9cdb2;color:#fff8}
+.farm-zoom span{font-size:11px;font-weight:900;color:#6b4a2a;min-width:34px;text-align:center}
+.game:not(:has(.zone-farm)) .farm-zoom{display:none}
+@media(max-height:500px){.farm-zoom{flex-direction:row}.farm-zoom button{width:34px;height:34px;font-size:20px}}
+/* The farm keeps its decorations (drifting cloud shadows reach 40% past each side) inside the picture, so the stage can
+   only be dragged as far as the farm picture goes. */
+.world.zone-farm{overflow:clip}
+/* No rubber-band bounce past the farm on phones (iOS 16+, Android); the farm stage is panned by avatar-world.js, which
+   stops at the picture's edge. Beside a zoomed-out farm narrower than the screen: grass, not the village picture. */
+html,body,.stage{overscroll-behavior:none}
+.game:has(.world.zone-farm) .stage{touch-action:none;overscroll-behavior:none!important;background:#6f9a43}
+/* On the farm the page behind is grass too, and a double tap never zooms the page. */
+html:has(.world.zone-farm),body:has(.world.zone-farm){background:#6f9a43}
+.game:has(.world.zone-farm){touch-action:manipulation}

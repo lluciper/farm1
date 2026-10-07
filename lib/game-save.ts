@@ -1,0 +1,7 @@
+import {env} from 'cloudflare:workers';
+import {currentAccount,sha256} from './accounts';
+export function gameDb(){if(!env.DB)throw Error('Lưu game tạm thời không khả dụng');return env.DB}
+// A signed-in session decides the save key. Without one, players use a device-held guest secret (also what old link-based
+// builds stored); a secret stops working once its farm is claimed by an account.
+export async function saveKey(request:Request){const account=await currentAccount(request);if(account)return account.keyHash;const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!token)return null;const key=await sha256(token);const claimed=await gameDb().prepare('SELECT 1 AS n FROM accounts WHERE key_hash=?').bind(key).first();return claimed?null:key}
+export function validPayload(data:any){return !!data&&data.version===1&&data.farm?.version===3&&typeof data.farm.profile?.name==='string'&&data.farm.profile.name.length<=32&&Number.isFinite(data.farm.coins)&&data.farm.coins>=0&&Number.isFinite(data.farm.xp)&&data.farm.xp>=0&&Array.isArray(data.farm.plots)&&data.farm.plots.length>=12&&data.farm.plots.length<=96&&data.cards&&Array.isArray(data.cards.opponents)&&data.cards.opponents.length===3&&new Set(data.cards.opponents).size===3&&data.cards.opponents.every((n:any)=>typeof n==='string'&&n.length<=32)&&(!data.cards.game||['tien','bac','sam','three','phom'].includes(data.cards.game.kind))}

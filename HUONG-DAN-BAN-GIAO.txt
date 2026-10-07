@@ -1,0 +1,53 @@
+BÀN GIAO GAME WRP3HNG — BẢN 50, 02/10/2026
+Tên miền đang sử dụng: https://wrp3hng.haniel.vn
+Commit: 343e48bb68d59f6761fbb21a14f1dbce66d129e3
+
+Bản ZIP gồm mã nguồn và tài nguyên của phiên bản đã xuất bản. Không gồm cơ sở dữ liệu người chơi, mật khẩu quản trị, khóa dịch vụ hoặc lịch sử Git.
+
+1. CHỈNH SỬA
+Giải nén, mở thư mục game-wrp3hng trong VS Code, Cursor hoặc IDE khác.
+Yêu cầu Node >=22.13.0 và pnpm theo package.json (11.25.0).
+Trong terminal của thư mục dự án:
+  pnpm install --frozen-lockfile
+  pnpm dev
+Mở địa chỉ mà terminal hiển thị. Dự án clean clone chọn portable, mặc định cổng 5173.
+Lệnh này chưa được thử trên máy của người nhận; cần thiết lập môi trường tương ứng.
+
+2. CÁC FILE CHÍNH
+public/style.css: giao diện và kích thước màn hình.
+public/game.js: giao diện chính và thao tác.
+public/world3d.js: nhân vật và động vật 3D (Three.js trong public/vendor/, giấy phép MIT). Máy không hỗ trợ WebGL thì game tự dùng lại ảnh vẽ tay.
+public/avatar-world.js: di chuyển (tìm đường, đi/chạy, phím mũi tên), cử động ảnh vẽ tay của nhân vật và động vật, thú cưng đi theo, vật nuôi đi lang thang, bong bóng trạng thái.
+public/avatar-rig.css: kích thước và lớp hiển thị của nhân vật, thú cưng.
+public/shoe-fit.js, tools/art/shoe-fit.py: vị trí mép giày và đường chia hai chiếc trong từng ảnh giày (chạy lại script khi đổi ảnh giày).
+public/puppet-joints.js, tools/rig/puppet-joints.py: khớp cổ, hông, vai của từng bộ đồ cho nhân vật đi (chạy lại script khi thêm hoặc vẽ lại bộ đồ).
+public/pens/*-pen.png: ảnh chuồng đã làm nét (bản gốc trong tools/art/src/pens/). public/pens/grass-carpet.webp: nền thảm cỏ khu chuồng, tạo bằng tools/art/grass-carpet.py.
+tools/art/split-hair.py: tách mỗi kiểu tóc thành lớp tóc sau và lớp tóc trên đầu có chừa khuôn mặt (nguồn: tools/art/src/).
+public/avatar-rig.js: hình heo vẽ bằng code (tạm, khi chưa có ảnh vẽ tay) và bộ vẽ SVG dự phòng.
+public/expansion.js: các khu mở rộng, bàn bài với máy.
+public/rooms.js: giao diện phòng bạn bè.
+public/cards.js: luật chơi bài.
+public/core.js: logic nông trại.
+public/index.html: trang game và phiên bản cache các file.
+public/: hình ảnh, âm thanh, tài nguyên.
+app/api/: API phía máy chủ.
+lib/game-save.ts: lưu tiến độ phía máy chủ.
+lib/rooms.ts: quản lý phòng bài phía máy chủ.
+
+3. ĐỒNG BỘ FILE SINH TỰ ĐỘNG
+Sau khi sửa public/index.html, tạo lại app/game-html.ts bằng:
+  node -e "const fs=require('node:fs');fs.writeFileSync('app/game-html.ts','export const gameHTML = '+JSON.stringify(fs.readFileSync('public/index.html','utf8'))+';\n')"
+Khi sửa logic core/cards, xem và chạy scripts/sync-card-engine.mjs để đồng bộ engine phía máy chủ.
+Tăng phiên bản cache của file đã sửa trong public/index.html.
+Các bài kiểm tra trong tests có thể chứa kỳ vọng cũ; chọn bài phù hợp với thay đổi.
+
+4. XUẤT BẢN
+Sửa trên máy không tự cập nhật link đang chạy.
+Hiện tại game được xuất bản qua ChatGPT Sites, có Cloudflare Worker và cơ sở dữ liệu D1 với binding DB.
+Nếu tiếp tục hosting hiện tại: cần đưa bản sửa về quy trình xuất bản của dự án Sites.
+Nếu tự quản lý hosting: bên phát triển phải thiết lập build/deploy Worker, DB, bí mật môi trường và xác thực theo mã nguồn; sau đó chuyển DNS tên miền.
+Không thể chỉ đưa thư mục public lên hosting tĩnh rồi giữ đầy đủ tài khoản, đồng bộ và phòng bài.
+
+5. GIỮ TIẾN ĐỘ NGƯỜI CHƠI
+Cần sao lưu/chuyển cơ sở dữ liệu hiện tại, cấu hình xác thực và kiểm tra đăng nhập/lưu/khôi phục/phòng bài trước khi chuyển tên miền.
+Bản mã nguồn này KHÔNG chứa dữ liệu người chơi. Việc tải về không chuyển hosting và không thay đổi game đang chạy.

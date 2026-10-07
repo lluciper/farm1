@@ -1,0 +1,15 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+const ctx={};vm.createContext(ctx);for(const name of ['legacy-core.js','core.js','save-compat.js'])vm.runInContext(fs.readFileSync('public/'+name,'utf8'),ctx);
+const F=ctx.Farm,old=ctx.LegacyFarm,newer=ctx.NewFarm;
+const original=JSON.parse(fs.readFileSync('tests/fixtures/v58-progress.json','utf8'));
+const copy=x=>JSON.parse(JSON.stringify(x));
+const migrated=F.migrate(original);
+assert.equal(F.level(migrated),700);assert.equal(F.MAX_LEVEL,Infinity);
+for(const key of ['coins','xp','rewardLevel','plots','bag','seeds','wardrobe','footwear','pets','house','kitchen','town','automation','work','animals','fishing','pond','farmDecor','cafeEquipment'])assert.deepEqual(copy(migrated[key]),original[key],key+' must survive replacement');
+assert.deepEqual(copy(F.migrate(migrated)),copy(migrated),'second migration is idempotent');
+assert.equal(F.threshold(701),old.threshold(701));assert.equal(migrated.plots.length,51);assert.equal(F.progressionStart(migrated),50);
+const next=F.initial();assert.equal(next.xpCurve,5);assert.equal(F.MAX_LEVEL,200);assert.equal(F.progressionStart(next),100);assert.equal(F.level(migrated),700,'state dispatch does not depend on last new-player initialization');
+assert.equal(F.level(F.migrate(original)),700);F.validate(migrated);
+F.perform(migrated,{type:'travel',zone:'farm'});const n=migrated.coins;F.perform(migrated,{type:'expandFarm'});assert.equal(migrated.plots.length,52);assert.equal(migrated.coins,n-26000);assert.equal(migrated.plots[50].crop,'grapeGreen');
+F.migrate(next);assert.equal(F.threshold(16),newer.threshold(16));F.validate(next);
+console.log('PASS: v58 level 700, 51 purchased plots, coins, possessions, house/rooms, pets, jobs and timers survive; repeat migration is stable; new GitHub progression remains separate; old players can buy another plot.');

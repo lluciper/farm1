@@ -1,0 +1,3 @@
+(()=>{if(!globalThis.fetch||!globalThis.crypto?.randomUUID)return;const id=crypto.randomUUID();let played=false,started=false,pending=false;async function send(type){try{const r=await fetch('/api/analytics',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,type}),keepalive:true});return r.ok}catch{return false}}
+async function start(){if(pending||started)return;pending=true;started=await send('visit');pending=false;if(started&&played)send('play')}
+window.farmAnalytics={played(){if(played)return;played=true;if(started)send('play');else start()}};start();setInterval(()=>{if(document.visibilityState!=='visible')return;if(!started)start();else if(played)send('heartbeat')},30000)})();

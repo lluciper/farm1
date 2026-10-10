@@ -1,0 +1,15 @@
+art-ref/
+tools/art/src/
+public/vendor/
+public/**/*.png
+public/**/*.webp
+public/**/*.svg
+dist/
+drizzle/meta/
+components/ui/
+app/game-html.ts
+lib/farm-engine.ts
+lib/card-engine.ts
+tsconfig.tsbuildinfo
+pnpm-lock.yaml
+CHI-DAO-MY-THUAT.md

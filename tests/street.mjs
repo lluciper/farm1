@@ -11,7 +11,7 @@ async function post(body,who=0){return api.POST(req('POST',body,who))}async func
 assert.equal((await api.GET(req('GET',null,0,'',{cookie:'',authorization:'Bearer '+tokens[0]}))).status,401);
 assert.equal((await api.POST(req('POST',{action:'presence',x:50,y:70},0,'',{origin:'https://evil.test'}))).status,403);
 const codes=[];for(let i=0;i<3;i++){const r=await post({action:'presence',x:500,y:-50},i);assert.equal(r.status,200);codes.push((await r.json()).code)}
-let d=await (await get()).json();assert.equal(d.players.length,3);assert.equal(d.self,codes[0]);assert(d.players.every(p=>p.x===92&&p.y===38));for(const key of keys)assert(!JSON.stringify(d).includes(key));assert(!JSON.stringify(d).includes('key_hash'));assert(!JSON.stringify(d).includes('password'));
+let d=await (await get()).json();assert.equal(d.players.length,3);assert.equal(d.self,codes[0]);assert(d.players.every(p=>p.x===99&&p.y===15));for(const key of keys)assert(!JSON.stringify(d).includes(key));assert(!JSON.stringify(d).includes('key_hash'));assert(!JSON.stringify(d).includes('password'));
 assert.equal((await get(0,'?with='+codes[1])).status,403);assert.equal((await post({action:'message',code:codes[1],text:'Không được',id:crypto.randomUUID()})).status,403);
 assert.equal((await post({action:'request',code:codes[1]})).status,200);d=await (await get(1)).json();assert(d.contacts.find(p=>p.code===codes[0]).incoming);assert.equal((await post({action:'accept',code:codes[1]})).status,409);assert.equal((await post({action:'accept',code:codes[0]},1)).status,200);
 const message={action:'message',code:codes[1],text:'Xin chào <script> & Hằng!',id:crypto.randomUUID()};assert.equal((await post(message)).status,200);assert((await (await post(message)).json()).duplicate);assert.equal((await post({...message,text:'Khác'})).status,409);assert.equal((await post({...message,id:crypto.randomUUID()})).status,429);
@@ -44,7 +44,10 @@ sql.prepare('UPDATE street_gestures SET created=?').run(Date.now()-4000);
 assert.equal((await post({...gesture,id:crypto.randomUUID(),kind:'jump'})).status,200);
 await post({action:'block',code:codes[0]},1);sql.prepare('DELETE FROM street_gestures').run();assert.equal((await post({...gesture,id:crypto.randomUUID(),kind:'kiss'})).status,403);
 await post({action:'unblock',code:codes[0]},1);
-for(const kind of ['kiss','punch','sit','jump']){sql.prepare('DELETE FROM street_gestures').run();assert.equal((await post({...gesture,id:crypto.randomUUID(),kind})).status,200)}
+for(const kind of ['kiss','punch','sit','jump','wish']){sql.prepare('DELETE FROM street_gestures').run();assert.equal((await post({...gesture,id:crypto.randomUUID(),kind})).status,200)}
 sql.prepare('UPDATE street_gestures SET created=?').run(Date.now()-16000);assert.equal((await (await get()).json()).gestures.length,0);
+sql.prepare('DELETE FROM street_gestures').run();assert.equal((await post({...gesture,id:crypto.randomUUID(),kind:'fly'})).status,400,'unknown gesture refused');
+// a seat on the park swing (y 22) and a bench by the edge keep their place; off-map positions are pulled back onto it
+for(const [x,y,want] of [[80,22,[80,22]],[13,35,[13,35]],[-50,-50,[1,15]],[500,500,[99,99]]]){await post({action:'presence',x,y});const me=(await (await get()).json()).players.find(p=>p.code===codes[0]);assert.deepEqual([me.x,me.y],want,`presence ${x},${y}`)}
 assert.deepEqual(sql.prepare('SELECT * FROM game_saves ORDER BY key_hash').all(),snapshot);
-console.log('PASS: simultaneous chat membership, late-entry cutoff, 30s deletion, server identity, consent recipient ownership, gestures/rate/block/expiry gates and unchanged saves.');
+console.log('PASS: simultaneous chat membership, late-entry cutoff, 30s deletion, server identity, consent recipient ownership, gestures/rate/block/expiry gates, park seats kept and unchanged saves.');

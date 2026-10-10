@@ -31,6 +31,10 @@ html.game-hidden *,html.game-hidden *::before,html.game-hidden *::after{animatio
 .low-power .xom-ambient{display:none}
 .low-power .xom-butterfly{animation:none!important;display:none}
 .low-power .herd-tip.tip-keep{animation:none!important}
+/* Speech bubbles pop in once instead of bobbing forever, and ready pens stop pulsing a box-shadow: both restyled or
+   repainted the barn every frame (about a fifth of a slow phone's time). */
+.low-power .herd-tip:not(.tip-keep):not(.tip-out){animation:herd-tip-pop .32s cubic-bezier(.3,1.6,.6,1) both!important}
+.low-power .barn-yard .pen-ready .pen-info{animation:none!important}
 /* Weak phones: the 3D player draws its own ground shadow, so the CSS drop-shadow on its moving box (re-rasterised every
    frame) goes; young crops stop swaying under their filters. */
 .low-power .avatar.is-3d{filter:none!important}

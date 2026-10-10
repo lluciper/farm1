@@ -13,7 +13,7 @@ const R=window.AvatarRig,world=document.getElementById('world'),stage=document.g
 if(!world||!avatar||typeof s==='undefined'||typeof F==='undefined')return;
 document.documentElement.classList.add('avatar-world');
 const reduced=!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const OUTDOOR=['farm','village'],TAU=Math.PI*2,clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,approach=(v,t,rate,dt)=>v+(t-v)*(1-Math.exp(-rate*dt));
+const OUTDOOR=['farm','village','barn'],TAU=Math.PI*2,clamp=(v,a,b)=>v<a?a:v>b?b:v,lerp=(a,b,t)=>a+(b-a)*t,approach=(v,t,rate,dt)=>v+(t-v)*(1-Math.exp(-rate*dt));
 const spring=(st,target,k,c,dt)=>{for(let i=0;i<2;i++){const h=dt/2;st.v+=(k*(target-st.x)-c*st.v)*h;st.x+=st.v*h}return st.x};
 // Write a style only when it changed (most parts stand still most of the time).
 const setStyle=(cache,el,prop,v)=>{if(cache.get(el)?.[prop]===v)return;const c=cache.get(el)||{};c[prop]=v;cache.set(el,c);el.style[prop]=v};
@@ -146,10 +146,10 @@ player.setLook(playerLook());
 // The model is drawn into a canvas a bit larger than the avatar box (hat and swinging arms reach outside it), with its
 // feet where the painted feet were. The box is 1.12 model units tall, so the 1-unit character fills ~90% of it.
 let player3d=null;
-const look3d=()=>R?R.look({gender:s.profile.gender,outfit:s.wardrobe.equipped,hair:s.appearance.hair,shoe:s.footwear.equipped,modular:F.outfits[s.wardrobe.equipped]?.modular!==undefined}):{gender:s.profile.gender,outfit:s.wardrobe.equipped};
+const look3d=()=>R?R.look({gender:s.profile.gender,outfit:s.wardrobe.equipped,hair:s.appearance.hair,shoe:s.footwear.equipped,hat:s.headwear?.equipped,modular:F.outfits[s.wardrobe.equipped]?.modular!==undefined}):{gender:s.profile.gender,outfit:s.wardrobe.equipped,hat:s.headwear?.equipped};
 function use3D(W){
   if(player3d||!W)return;
-  try{const view=new W.View(host,{left:-.3,top:-.32,width:1.6,height:1.36,zoom:1.52,center:[0,.66],cls:'w3d-player',dpr:Math.min(3,devicePixelRatio||1)});view.priority=1;view.measure();player3d={view,ch:new W.Character(view,look3d())};player.el.hidden=player.shadow.hidden=true;avatar.classList.add('is-3d')}
+  try{const view=new W.View(host,{left:-.3,top:-.32,width:1.6,height:1.36,zoom:1.52,center:[0,.66],cls:'w3d-player',dpr:Math.min(2,devicePixelRatio||1)});view.priority=1;view.measure();player3d={view,ch:new W.Character(view,look3d())};player.el.hidden=player.shadow.hidden=true;avatar.classList.add('is-3d')}
   catch(e){console.warn('3D player unavailable',e);player3d=null}
 }
 // One face for the movement code, whichever drawing is active.
@@ -231,12 +231,15 @@ if(window.ResizeObserver){new ResizeObserver(measure).observe(world);new ResizeO
 const bounds=()=>{if(bigFarm())return {x0:W*.09,x1:W*.93,y0:H*.2,y1:H*.93};const mx=Math.max(W*.03,AW/2+W*.01);return {x0:mx,x1:W-mx,y0:Math.max(H*.15,AH+H*.01),y1:H*.97}};
 // Phones: the farm is a big field the camera moves over, and the player walks right across the rows to reach any plot.
 function bigFarm(){return s.zone==='farm'&&!!window.matchMedia?.('(max-width:650px)').matches}
+// In the village only the painted paths are walkable (village.js). A spot within .3% of a path still counts, so a
+// position saved rounded to .1% right on the edge of a path never leaves the player stuck off it.
+const offPath=(x,y)=>{if(s.zone!=='village'||typeof villageWalkable!=='function')return false;const px=x/W*100,py=y/H*100;return ![[0,0],[.3,0],[-.3,0],[0,.3],[0,-.3]].some(([dx,dy])=>villageWalkable(px+dx,py+dy))};
 function obstacles(forPets=false){if(bigFarm()&&!forPets)return [];const wr=world.getBoundingClientRect(),kx=W/(wr.width||W),ky=H/(wr.height||H);const out=[];world.querySelectorAll('.plot,.real-pen').forEach(el=>{const r=el.getBoundingClientRect();if(r.width&&r.height)out.push({x0:(r.left-wr.left)*kx,y0:(r.top-wr.top)*ky,x1:(r.right-wr.left)*kx,y1:(r.bottom-wr.top)*ky})});return out}
 
 // ---------- Path finding ----------
 function makeMap(){
   const b=bounds(),obs=obstacles(),pad=clamp(AW*.17,5,12),C=Math.max(9,Math.round(Math.min(W,H)/52)),cols=Math.ceil(W/C),rows=Math.ceil(H/C);
-  const hit=(x,y)=>x<b.x0||x>b.x1||y<b.y0||y>b.y1||obs.some(r=>x>r.x0-pad&&x<r.x1+pad&&y>r.y0-pad*.5&&y<r.y1+pad*.35);
+  const hit=(x,y)=>x<b.x0||x>b.x1||y<b.y0||y>b.y1||offPath(x,y)||obs.some(r=>x>r.x0-pad&&x<r.x1+pad&&y>r.y0-pad*.5&&y<r.y1+pad*.35);
   const grid=new Uint8Array(cols*rows);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)grid[r*cols+c]=hit((c+.5)*C,(r+.5)*C)?1:0;
   return {b,C,cols,rows,grid,hit};
 }
@@ -253,6 +256,9 @@ function astar(m,sc,sr,gc,gr){
     for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dc&&!dr)continue;const nc=c+dc,nr=r+dr;if(nc<0||nr<0||nc>=m.cols||nr>=m.rows)continue;const j=nr*m.cols+nc;if(m.grid[j]||closed[j])continue;if(dc&&dr&&(m.grid[r*m.cols+nc]||m.grid[nr*m.cols+c]))continue;const ng=g[i]+(dc&&dr?1.414:1);if(ng<g[j]){g[j]=ng;from[j]=i;push(j,ng+h(j))}}}
   if(from[goal]<0&&goal!==start)return null;const cells=[];for(let i=goal;i!==-1;i=from[i]){cells.push(i);if(i===start)break}return cells.reverse();
 }
+// Entering the barn or the village keeps the last position, which may fall inside a pen or off the village paths:
+// step onto the nearest free spot. Re-measure first: coming from the phone farm, W/H may still hold the big field's size.
+function stepOntoPath(){measure();syncFromState();const m=makeMap(),c=clamp(Math.floor(mv.x/m.C),0,m.cols-1),r=clamp(Math.floor(mv.y/m.C),0,m.rows-1);if(!m.hit(mv.x,mv.y))return;const f=nearestFree(m,c,r);if(f){mv.x=(f[0]+.5)*m.C;mv.y=(f[1]+.5)*m.C;writeState()}}
 function findPath(a,t){
   const m=makeMap(),cell=p=>[clamp(Math.floor(p.x/m.C),0,m.cols-1),clamp(Math.floor(p.y/m.C),0,m.rows-1)],ctr=([c,r])=>({x:(c+.5)*m.C,y:(r+.5)*m.C});
   let goal={x:clamp(t.x,m.b.x0,m.b.x1),y:clamp(t.y,m.b.y0,m.b.y1)},[gc,gr]=cell(goal);
@@ -325,7 +331,7 @@ function stepPlayer(dt){
   else if(mv.saveAt&&performance.now()>mv.saveAt){mv.saveAt=0;writeState();try{save()}catch{}}
 }
 // Collision test for keyboard steering (rebuilt at most every 250 ms; plots don't move while you walk).
-let lite=null,liteAt=0;function makeMapLite(){const now=performance.now();if(!lite||now-liteAt>2000){const b=bounds(),obs=obstacles(),pad=clamp(AW*.17,5,12);lite={hit:(x,y)=>x<b.x0||x>b.x1||y<b.y0||y>b.y1||obs.some(r=>x>r.x0-pad&&x<r.x1+pad&&y>r.y0-pad*.5&&y<r.y1+pad*.35)};liteAt=now}return lite}
+let lite=null,liteAt=0;function makeMapLite(){const now=performance.now();if(!lite||now-liteAt>2000){const b=bounds(),obs=obstacles(),pad=clamp(AW*.17,5,12);lite={hit:(x,y)=>x<b.x0||x>b.x1||y<b.y0||y>b.y1||offPath(x,y)||obs.some(r=>x>r.x0-pad&&x<r.x1+pad&&y>r.y0-pad*.5&&y<r.y1+pad*.35)};liteAt=now}return lite}
 
 // ---------- Footfall dust ----------
 let lastPhase=0;
@@ -570,7 +576,7 @@ function frame(now){
   if(document.hidden||now-(frame.lastDraw||0)<30){scheduleAnimation();return}frame.lastDraw=now;
   const dt=Math.min(.12,Math.max(0,(now-last)/1000));last=now;
   const show=OUTDOOR.includes(s.zone)&&avatar.style.display!=='none';if(player3d){player3d.view.active=show&&(mv.moving||!!mv.path||cheering);player3d.view.suspended=!show}
-  if(s.zone!==mv.zone){snapReq=now+120;mv.zone=s.zone;mv.path=null;mv.onArrive=null;avatarZ=+getComputedStyle(avatar).zIndex||5;mv.speed=0;mv.held.clear();mv.kv.x=mv.kv.y=0;measure();syncFromState();lite=null;petMap=null;for(const p of pets.values()){p.target=null}}
+  if(s.zone!==mv.zone){snapReq=now+120;mv.zone=s.zone;mv.path=null;mv.onArrive=null;avatarZ=+getComputedStyle(avatar).zIndex||5;mv.speed=0;mv.held.clear();mv.kv.x=mv.kv.y=0;measure();syncFromState();lite=null;petMap=null;if(s.zone==='barn'||s.zone==='village')stepOntoPath();for(const p of pets.values()){p.target=null}}
   if(show){
     if(!mv.moving&&!mv.path&&!mv.saveAt)syncFromState();
     stepPlayer(dt);

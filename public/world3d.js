@@ -19,8 +19,10 @@ const WEAK = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemor
 
 let renderer = null;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: !(WEAK && PHONE), alpha: true, powerPreference: 'low-power' });
+  renderer = new THREE.WebGLRenderer({ antialias: !PHONE, alpha: true, powerPreference: 'low-power' });
   renderer.setPixelRatio(1); renderer.setClearColor(0x000000, 0); renderer.setSize(512, 512, false);
+  // Shader errors are only useful while developing; checking them makes every first draw wait for the GPU to compile.
+  renderer.debug.checkShaderErrors = false;
 } catch { renderer = null }
 
 // ---------- Look: toon shading in three tones with warm dark-brown outlines, like the painted art ----------
@@ -76,18 +78,18 @@ const lathe = (pts, seg = 32) => new THREE.LatheGeometry(pts.map(([r, y]) => new
 const views = new Set();
 class View {
   // host: element the canvas is placed in; box: {w,h} in host units (fractions of the host size) and where it sits
-  constructor(host, { left = 0, top = 0, width = 1, height = 1, cls = 'w3d-view', zoom = 1, center = [0, .5], pitch = .26, live = false, dpr = DPR } = {}) {
+  constructor(host, { left = 0, top = 0, width = 1, height = 1, cls = 'w3d-view', zoom = 1, center = [0, .5], pitch = .26, live = false, dpr = DPR, maxPx = 512 } = {}) {
     this.host = host; this.canvas = document.createElement('canvas'); this.canvas.className = cls; this.canvas.setAttribute('aria-hidden', 'true');
     Object.assign(this.canvas.style, { position: 'absolute', left: left * 100 + '%', top: top * 100 + '%', width: width * 100 + '%', height: height * 100 + '%', pointerEvents: 'none' });
     host.appendChild(this.canvas); this.ctx = this.canvas.getContext('2d');
-    this.scene = new THREE.Scene(); this.zoom = zoom; this.center = center; this.pitch = pitch; this.live = live; this.dpr = Math.min(dpr, SCREEN_DPR, 3); this.dirty = true;
+    this.scene = new THREE.Scene(); this.zoom = zoom; this.center = center; this.pitch = pitch; this.live = live; this.dpr = Math.min(dpr, SCREEN_DPR, 3); this.maxPx = maxPx; this.dirty = true;
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 50);
     const hemi = new THREE.HemisphereLight('#fff7e6', '#8a7b5c', 1.9), sun = new THREE.DirectionalLight('#fff1d6', 2.3);
     sun.position.set(-2.2, 4, 3.2); this.scene.add(hemi, sun);
     this.root = node(this.scene); views.add(this); this.measure();
   }
   measure() {
-    const r = this.canvas.getBoundingClientRect(), scale = Math.min(this.priority ? this.dpr : this.dpr * QUALITY.scale, 512 / Math.max(1, this.canvas.offsetWidth, this.canvas.offsetHeight)), w = Math.max(1, Math.round(this.canvas.offsetWidth * scale)), h = Math.max(1, Math.round(this.canvas.offsetHeight * scale));
+    const r = this.canvas.getBoundingClientRect(), scale = Math.min(this.priority ? this.dpr : this.dpr * QUALITY.scale, this.maxPx / Math.max(1, this.canvas.offsetWidth, this.canvas.offsetHeight)), w = Math.max(1, Math.round(this.canvas.offsetWidth * scale)), h = Math.max(1, Math.round(this.canvas.offsetHeight * scale));
     this.visible = r.width > 0 && r.height > 0 && r.bottom > -50 && r.top < innerHeight + 50 && r.right > -50 && r.left < innerWidth + 50;
     if (w !== this.canvas.width || h !== this.canvas.height) { this.canvas.width = w; this.canvas.height = h; this.dirty = true }
     const projectionKey = [w, h, this.zoom, ...this.center, this.pitch].join(',');
@@ -169,11 +171,13 @@ function outward(g) {
 }
 // A shell of hair over the skull ending at a hairline that is high at the front and low at the back. `front` is the
 // hairline angle at the front (from the top), `back` at the back, `side` how far round the face opening reaches.
-function hairCap({ front = .36, back = .74, side = .5, r = HEAD_R * 1.07, flare = 0 } = {}) {
+// The hairline runs from the forehead (`front`) to just above the ear (`ear`, at `side` of the way round), then drops
+// right behind the ear and rounds off at the nape (`back`), so neither the back of the head nor behind the ears is bare.
+function hairCap({ front = .36, back = .86, side = .5, ear = .52, r = HEAD_R * 1.09, flare = 0 } = {}) {
   const seg = 48, rows = 18, pos = [], idx = [], uv = [];
   for (let i = 0; i <= seg; i++) {
     const phi = -Math.PI + TAU * i / seg, a = Math.abs(phi) / Math.PI;       // a: 0 front … 1 back
-    const line = (a < side ? lerp(front, (front + back) / 2, Math.pow(a / side, 2)) : lerp((front + back) / 2, back, (a - side) / (1 - side))) * Math.PI;
+    const line = (a < side ? lerp(front, ear, Math.pow(a / side, 2)) : lerp(ear, back, 1 - Math.pow(1 - (a - side) / (1 - side), 2))) * Math.PI;
     for (let j = 0; j <= rows; j++) {
       const th = line * j / rows, rr = r * (1 + flare * Math.pow(j / rows, 3));
       pos.push(rr * Math.sin(th) * Math.sin(phi), rr * Math.cos(th), rr * Math.sin(th) * Math.cos(phi)); uv.push(i / seg, 1 - j / rows);
@@ -184,13 +188,13 @@ function hairCap({ front = .36, back = .74, side = .5, r = HEAD_R * 1.07, flare 
 }
 // A curtain of hair hanging around the head from `top` (y) down to `bottom`, leaving the face open (|phi| < open).
 // It hugs the skull, swells a little, then curls in at the tips; the lower edge is broken into soft points.
-function hairCurtain({ top = .1, bottom = -.2, open = .42, r = HEAD_R * 1.08, wave = 0, swell = .07, curl = .035, points = .014 } = {}) {
-  const seg = 56, rows = 16, pos = [], idx = [], uv = [], p0 = open * Math.PI, p1 = TAU - p0;
+// The face opening widens toward the tips (`taper`), so the hair frames the face in a curve instead of a straight cut.
+function hairCurtain({ top = .1, bottom = -.2, open = .42, taper = .08, r = HEAD_R * 1.1, wave = 0, swell = .07, curl = .035, points = .014 } = {}) {
+  const seg = 56, rows = 16, pos = [], idx = [], uv = [];
   for (let i = 0; i <= seg; i++) {
-    const phi = p0 + (p1 - p0) * i / seg, edge = Math.min(1, Math.min(phi - p0, p1 - phi) / .5);
-    const bot = bottom + points * Math.abs(Math.sin(phi * 7)) - (1 - edge) * .02;
     for (let j = 0; j <= rows; j++) {
-      const t = j / rows, y = lerp(top, bot, t), skull = y > 0 ? Math.sqrt(Math.max(0, r * r - y * y)) : r;
+      const t = j / rows, p0 = (open + taper * t * t) * Math.PI, p1 = TAU - p0, phi = p0 + (p1 - p0) * i / seg, edge = Math.min(1, Math.min(phi - p0, p1 - phi) / .5);
+      const bot = bottom + points * Math.abs(Math.sin(phi * 7)) - (1 - edge) * .02, y = lerp(top, bot, t), skull = y > 0 ? Math.sqrt(Math.max(0, r * r - y * y)) : r;
       const rr = Math.max(skull, r * .93) * (1 + swell * Math.sin(Math.PI * Math.min(1, t * 1.15))) - curl * Math.pow(t, 5) + wave * Math.sin(t * 10 + i * .55) * t;
       pos.push(rr * Math.sin(phi), y, rr * Math.cos(phi)); uv.push(i / seg, 1 - t);
     }
@@ -199,67 +203,88 @@ function hairCurtain({ top = .1, bottom = -.2, open = .42, r = HEAD_R * 1.08, wa
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); return outward(g);
 }
 // One lock of hair: a tapered, slightly curved lens laid on the head surface at (phi, theta), hanging down.
-function lock(parent, mat, phi, theta, { len = .1, wid = .05, thick = .022, tilt = 0, out = 1.08, droop = .2 } = {}) {
+function lock(parent, mat, phi, theta, { len = .1, wid = .05, thick = .022, tilt = 0, out = 1.1, droop = .2 } = {}) {
   const r = HEAD_R * out, p = [r * Math.sin(theta) * Math.sin(phi), r * Math.cos(theta), r * Math.sin(theta) * Math.cos(phi)];
   const g = node(parent, p); g.rotation.order = 'YXZ'; g.rotation.y = phi; g.rotation.x = theta - Math.PI / 2 + droop; g.rotation.z = tilt;
   mesh(G.sphere, mat, { parent: g, pos: [0, -len * .42, 0], scale: [wid / 2, len / 2, thick / 2] });
   return g;
 }
 const capG = memo(j => hairCap(JSON.parse(j))), curtainG = memo(j => hairCurtain(JSON.parse(j)));
-function buildHair(head, style, mat) {
-  const D = Math.PI;
-  const fringe = (n, spread, theta, opt) => { for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : i / (n - 1) - .5; lock(head, mat, t * spread, theta, { ...opt, tilt: -t * .5 }) } };
-  const chain = [];
+// Strands: fine darker and lighter streaks running down the hair, and a soft sheen band where light catches shiny hair.
+// Caps and curtains map v from the crown/top (1) down to the tips (0), so the streaks follow the fall of the hair.
+const hairTex = memoTex('hair', () => canvasTex(256, 256, (g, W, H) => {
+  g.fillStyle = HAIR; g.fillRect(0, 0, W, H); let r = 7; const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < 240; i++) { g.fillStyle = rnd() < .55 ? '#2a170d40' : '#86573a34'; g.fillRect(rnd() * W, 0, .5 + rnd() * 1.3, H) }
+  const sh = g.createLinearGradient(0, 0, 0, H); sh.addColorStop(.1, '#c0937000'); sh.addColorStop(.26, '#c0937066'); sh.addColorStop(.44, '#c0937000'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
+}));
+// Modern cuts on the same eight keys (saves and painted pictures keep them); 'short' and 'side' differ by gender.
+// Under a nón lá (`hat`) anything tied on top of the head is tied low at the nape instead, or it would poke through.
+function buildHair(head, style, mat, gender, hat) {
+  const D = Math.PI, male = gender === 'male';
+  const fringe = (n, spread, theta, opt) => { for (let i = 0; i < n; i++) { const t = n === 1 ? 0 : i / (n - 1) - .5; lock(head, mat, t * spread, theta, { ...opt, tilt: (opt.tilt || 0) - t * .5 }) } };
+  // caps and curtains are open shells: drawn on both sides, so looking past an edge never shows a hole
+  const shell = toon('#fff', { map: mat.map, side: THREE.DoubleSide }), cap = o => mesh(capG(JSON.stringify(o)), shell, { parent: head });
+  // Hair that falls past the jaw hangs from a pivot near the crown, so it can sway a little (Character.update).
+  const curtain = o => { const pv = node(head, [0, .15, 0]); mesh(curtainG(JSON.stringify(o)), shell, { parent: pv, pos: [0, -.15, 0] }); chain.curtains.push(pv) };
+  // A hanging tail (ponytail / braid) as a chain of segments the spring physics swings.
+  const tail = (from, n, rots, size, step, weave = 0) => { let p = from; for (let i = 0; i < n; i++) { const s = node(p, [0, i ? -step : 0, 0]); s.rotation.x = rots[i] ?? rots[rots.length - 1]; const k = 1 - i / (n + 2); mesh(G.sphere, mat, { parent: s, pos: [weave * (i % 2 ? 1 : -1), -step * .55, 0], scale: [size[0] * k, step * (weave ? .8 : 1.05), size[1] * k], rot: [0, 0, weave * (i % 2 ? 6 : -6)] }); chain.push(s); p = s } return p };
+  const tie = (pos, rot, r = .03) => { const t = node(head, pos); mesh(G.torus(r, r * .45, 8, 18), toon('#e05a4f'), { parent: t, rot }); return t };
+  const chain = []; chain.curtains = [];
   switch (style) {
     case 'short':
-      mesh(capG(JSON.stringify({ front: .34, back: .68, side: .45 })), mat, { parent: head });
-      fringe(5, 1.3, .3 * D, { len: 0.085, wid: 0.045, droop: .35 });
-      for (const [p, t, l] of [[-.5, .12, .07], [.2, .08, .08], [.9, .16, .07], [2.4, .2, .07], [-2.2, .2, .07], [D, .25, .06]]) lock(head, mat, p, t * D, { len: l, wid: 0.04, droop: -.9 });
-      lock(head, mat, -1.25, .42 * D, { len: 0.07, wid: 0.035, droop: .1 }); lock(head, mat, 1.25, .42 * D, { len: 0.07, wid: 0.035, droop: .1 });
+      if (male) {        // two-block: short sides underneath, a fuller top that overhangs them, textured fringe
+        cap({ front: .36, back: .84, side: .5, r: HEAD_R * 1.085 }); cap({ front: .3, back: .56, side: .38, ear: .4, r: HEAD_R * 1.1 });
+        fringe(7, 1.25, .29 * D, { len: .1, wid: .05, thick: .018, droop: .55 });
+        if (!hat) for (const ph of [-.6, -.1, .4, .9]) lock(head, mat, ph, .1 * D, { len: .07, wid: .045, droop: -.7 });  // spikes would poke through a hat
+      } else {           // pixie: cropped close at the back, long side-swept fringe
+        cap({ front: .34, back: .82, side: .45, r: HEAD_R * 1.085 });
+        for (let i = 0; i < 6; i++) lock(head, mat, -.55 + i * .2, .26 * D, { len: .13 - i * .008, wid: .06, thick: .018, droop: .45, tilt: .8 - i * .08 });
+        for (const s of [-1, 1]) lock(head, mat, s * 1.3, .43 * D, { len: .08, wid: .035, droop: .05 });
+      }
       break;
-    case 'bob':
-      mesh(capG(JSON.stringify({ front: .3, back: .6, side: .4 })), mat, { parent: head });
-      mesh(curtainG(JSON.stringify({ bottom: -.2, open: .3 })), mat, { parent: head });
-      fringe(7, 1.2, .26 * D, { len: .12, wid: .075, droop: .3 });
+    case 'bob':          // Korean bob: chin length, ends curled under, thin see-through fringe
+      cap({ front: .3, back: .82, side: .4 }); curtain({ bottom: -.16, open: .3, taper: .06, swell: .09, curl: .06, points: .006 });
+      fringe(11, 1.15, .27 * D, { len: .115, wid: .032, thick: .012, droop: .3 });
       break;
-    case 'pony': {
-      mesh(capG(JSON.stringify({ front: .32, back: .7, side: .45 })), mat, { parent: head });
-      fringe(4, .9, .27 * D, { len: 0.11, wid: 0.05, droop: .25 });
-      lock(head, mat, -1.15, .4 * D, { len: 0.13, wid: 0.035, droop: .05 }); lock(head, mat, 1.15, .4 * D, { len: 0.13, wid: 0.035, droop: .05 });
-      const tie = node(head, [0, .17, -.17]); mesh(G.torus(.032, .013, 8, 16), toon('#e05a4f'), { parent: tie, rot: [-.9, 0, 0] });
-      // the tail leaves the tie going back, then hangs down past the shoulders
-      let p = tie; for (let i = 0; i < 5; i++) { const s = node(p, [0, i ? -.07 : 0, i ? 0 : -.015]); s.rotation.x = [1.15, -.38, -.38, -.3, -.2][i]; mesh(G.sphere, mat, { parent: s, pos: [0, -.04, 0], scale: [.046 - i * .005, .052, .04 - i * .004] }); chain.push(s); p = s }
-      break;
-    }
-    case 'wave':
-      mesh(capG(JSON.stringify({ front: .3, back: .6, side: .4 })), mat, { parent: head });
-      mesh(curtainG(JSON.stringify({ bottom: -.44, open: .33, swell: .12, curl: .02, wave: .012, points: .03 })), mat, { parent: head });
-      lock(head, mat, -.25, .26 * D, { len: 0.16, wid: 0.07, droop: .35, tilt: .5 }); lock(head, mat, .3, .26 * D, { len: 0.15, wid: 0.07, droop: .35, tilt: -.5 });
-      break;
-    case 'curly': {
-      mesh(capG(JSON.stringify({ front: .33, back: .66, side: .45, r: HEAD_R * 1.05 })), mat, { parent: head });
-      for (let i = 0; i < 46; i++) { const th = Math.acos(1 - 2 * ((i + .5) / 46)) * .62, ph = i * 2.39996; if (Math.abs(angleTo(0, ph)) < .55 && th > .36 * D) continue; const r = HEAD_R * 1.1; mesh(G.sphereLo, mat, { parent: head, pos: [r * Math.sin(th) * Math.sin(ph), r * Math.cos(th), r * Math.sin(th) * Math.cos(ph)], scale: .05 }) }
-      for (let i = 0; i < 6; i++) { const ph = (i / 5 - .5) * 1.25; mesh(G.sphereLo, mat, { parent: head, pos: [HEAD_R * 1.02 * Math.sin(ph), .11, HEAD_R * .98 * Math.cos(ph)], scale: .045 }) }
+    case 'pony': {       // high ponytail pulled back sleek, curtain bangs framing the face
+      cap({ front: .32, back: .88, side: .45 });
+      for (const s of [-1, 1]) { lock(head, mat, s * .4, .27 * D, { len: .12, wid: .05, thick: .016, droop: .3, tilt: s * .95 }); lock(head, mat, s * .8, .38 * D, { len: .16, wid: .04, droop: .15, tilt: s * .3 }) }
+      if (hat) tail(tie([0, -.03, -.215], [-1.9, 0, 0], .028), 6, [.25, -.06, -.06, -.05, -.04, -.03], [.055, .045], .07);
+      else tail(tie([0, .2, -.14], [-1.1, 0, 0], .028), 6, [1.3, -.45, -.4, -.3, -.25, -.15], [.055, .045], .075);
       break;
     }
-    case 'buns':
-      mesh(capG(JSON.stringify({ front: .32, back: .68, side: .45 })), mat, { parent: head });
-      fringe(5, 1, .27 * D, { len: 0.1, wid: 0.048, droop: .25 });
-      for (const s of [-1, 1]) { mesh(G.sphere, mat, { parent: head, pos: [s * .15, .17, -.05], scale: .075 }); mesh(G.torus(.04, .011, 8, 16), toon('#e05a4f'), { parent: head, pos: [s * .125, .135, -.04], rot: [1.2, 0, s * .6] }); lock(head, mat, s * 1.3, .45 * D, { len: 0.13, wid: 0.03, droop: .05 }) }
+    case 'wave':         // butterfly cut: long layers with volume, curtain bangs and face-framing pieces
+      cap({ front: .3, back: .84, side: .4 });
+      curtain({ bottom: -.3, open: .36, swell: .13, curl: .03, wave: .01, points: .02 });
+      curtain({ bottom: -.52, open: .42, r: HEAD_R * 1.04, swell: .1, curl: .025, wave: .014, points: .03 });
+      for (const s of [-1, 1]) { lock(head, mat, s * .3, .27 * D, { len: .17, wid: .075, thick: .02, droop: .3, tilt: s * .8 }); lock(head, mat, s * .62, .36 * D, { len: .24, wid: .06, droop: .12, tilt: s * .2 }) }
       break;
-    case 'braid': {
-      mesh(capG(JSON.stringify({ front: .3, back: .7, side: .45 })), mat, { parent: head });
-      fringe(4, .9, .27 * D, { len: 0.11, wid: 0.05, droop: .25 });
-      let p = node(head, [-.15, -.06, -.1]);
-      for (let i = 0; i < 6; i++) { const s = node(p, [0, i ? -.055 : 0, 0]); s.rotation.x = i ? .05 : .1; mesh(G.sphere, mat, { parent: s, pos: [i % 2 ? .006 : -.006, -.025, 0], scale: [.04 - i * .003, .036, .034] }); chain.push(s); p = s }
-      const tip = node(p, [0, -.06, 0]); mesh(G.torus(.02, .008, 8, 14), toon('#e05a4f'), { parent: tip, rot: [D / 2, 0, 0] });
+    case 'curly': {      // soft perm: small loose curls all over, curly fringe, ringlets down to the jaw
+      cap({ front: .33, back: .84, side: .45, r: HEAD_R * 1.085 });
+      for (let i = 0; i < 64; i++) { const th = Math.acos(1 - 2 * ((i + .5) / 64)) * .64, ph = i * 2.39996; if (Math.abs(angleTo(0, ph)) < .55 && th > .34 * D) continue; const r = HEAD_R * 1.1; mesh(G.sphereLo, mat, { parent: head, pos: [r * Math.sin(th) * Math.sin(ph), r * Math.cos(th), r * Math.sin(th) * Math.cos(ph)], scale: [.044, .04, .044] }) }
+      for (let i = 0; i < 7; i++) { const ph = (i / 6 - .5) * 1.3; mesh(G.sphereLo, mat, { parent: head, pos: [HEAD_R * 1.02 * Math.sin(ph), .1 - Math.abs(ph) * .03, HEAD_R * .98 * Math.cos(ph)], scale: .038 }) }
+      for (const s of [-1, 1]) for (let i = 0; i < 4; i++) mesh(G.sphereLo, mat, { parent: head, pos: [s * (.22 - i * .004), -.01 - i * .045, -.03 + (i % 2) * .012], scale: .034 - i * .003 });
+      break;
+    }
+    case 'buns':         // twisted space buns with scrunchies, wispy fringe, loose strands by the face
+      cap({ front: .32, back: .86, side: .45 }); fringe(9, 1.05, .27 * D, { len: .1, wid: .034, thick: .012, droop: .28 });
+      for (const s of [-1, 1]) { const b = node(head, hat ? [s * .12, -.06, -.19] : [s * .14, .19, -.04]); b.rotation.set(hat ? -1.2 : .3, 0, s * .5); mesh(G.sphere, mat, { parent: b, scale: .052 }); mesh(G.torus(.042, .022, 10, 22), mat, { parent: b, pos: [0, -.012, 0], rot: [D / 2, 0, 0] }); mesh(G.torus(.03, .01, 8, 16), toon('#e05a4f'), { parent: b, pos: [0, -.04, 0], rot: [D / 2, 0, 0] }); lock(head, mat, s * 1.25, .45 * D, { len: .15, wid: .028, droop: .05 }) }
+      break;
+    case 'braid': {      // side braid: hair swept to one side and woven over the shoulder
+      cap({ front: .3, back: .86, side: .45 }); for (let i = 0; i < 5; i++) lock(head, mat, -.5 + i * .22, .27 * D, { len: .12, wid: .06, droop: .4, tilt: .7 - i * .12 });
+      const end = tail(node(head, [-.17, -.09, -.04]), 8, [-.15, .02, .03], [.05, .042], .05, .01);
+      mesh(G.torus(.018, .008, 8, 14), toon('#e05a4f'), { parent: node(end, [0, -.05, 0]), rot: [D / 2, 0, 0] }); mesh(G.sphere, mat, { parent: end, pos: [0, -.075, 0], scale: [.028, .03, .022] });
       break;
     }
     case 'side':
-      mesh(capG(JSON.stringify({ front: .3, back: .66, side: .42 })), mat, { parent: head });
-      mesh(curtainG(JSON.stringify({ bottom: -.13, open: .45, swell: .05 })), mat, { parent: head });
-      lock(head, mat, -.45, .2 * D, { len: 0.2, wid: 0.1, droop: .5, tilt: .9, thick: 0.03 });
-      lock(head, mat, .45, .28 * D, { len: 0.1, wid: 0.04, droop: .3, tilt: -.3 });
+      if (male) {        // comma hair: volume on top, fringe swept to one side curling in like a comma
+        cap({ front: .33, back: .84, side: .46, r: HEAD_R * 1.085 }); cap({ front: .3, back: .55, side: .36, ear: .4, r: HEAD_R * 1.1 });
+        for (let i = 0; i < 5; i++) lock(head, mat, -.55 + i * .2, .27 * D, { len: .12, wid: .06, thick: .02, droop: .5, tilt: .9 - i * .22 });
+        if (!hat) lock(head, mat, .42, .3 * D, { len: .1, wid: .05, droop: .95, tilt: -.7 });
+      } else {           // deep side part, long sweep over one eye, layered length to the shoulders
+        cap({ front: .3, back: .84, side: .42 }); curtain({ bottom: -.28, open: .45, taper: .1, swell: .08, curl: .03, wave: .008, points: .02 });
+        lock(head, mat, -.45, .2 * D, { len: .22, wid: .11, droop: .5, tilt: .9, thick: .03 }); lock(head, mat, .45, .28 * D, { len: .12, wid: .045, droop: .3, tilt: -.3 });
+      }
       break;
   }
   return chain;
@@ -271,10 +296,34 @@ const hatTex = canvasTex(512, 256, (g, W, H) => {
   g.strokeStyle = '#c9984d'; g.lineWidth = 3; for (let i = 0; i < 9; i++) { const y = 20 + i * 27; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke() }
   g.strokeStyle = '#d8ae66'; g.lineWidth = 2; for (let i = 0; i < 32; i++) { g.beginPath(); g.moveTo(i * W / 32, 0); g.lineTo(i * W / 32, H); g.stroke() }
 });
-function buildHat(head) {
-  const g = node(head, [0, .17, .0]); g.rotation.set(-.1, 0, .06);
-  mesh(G.cone(.34, .25, 40), toon('#fff', { map: hatTex, side: THREE.DoubleSide }), { parent: g, pos: [0, .1, 0] });
-  mesh(G.torus(.338, .009, 6, 48), toon('#c9984d'), { parent: g, pos: [0, -.025, 0], rot: [Math.PI / 2, 0, 0], outline: false });
+// Hats (Siêu thị · Tiệm nón). Each sits on a node at crown height (head-local, face toward +z); the node is what the
+// spring physics bobs. HAT_COVER: hats over the crown, so tied-up hair goes low at the nape instead of through them.
+const HAT_COVER = { nonla: 1, cap: 1, bucket: 1, beanie: 1, straw: 1, beret: 0, sunhat: 1, catears: 0, fedora: 1, bowler: 1, cowboy: 1, flower: 0 };
+const halfSphere = new THREE.SphereGeometry(1, 32, 16, 0, TAU, 0, Math.PI / 2);
+function buildHat(head, kind = 'nonla') {
+  const g = node(head, [0, .17, 0]), m = (geo, mat, o) => mesh(geo, mat, { parent: g, ...o });
+  const crown = (r, h, mat, y = -.07) => m(halfSphere, mat, { pos: [0, y, 0], scale: [r, h, r] }), band = (r, y, c, t = .014) => m(G.torus(r, t, 6, 40), toon(c), { pos: [0, y, 0], rot: [Math.PI / 2, 0, 0], outline: false });
+  const brim = (r, y, mat, tilt = 0, sx = 1, sz = 1) => m(G.cyl(r, r, .012, 40), mat, { pos: [0, y, 0], rot: [tilt, 0, 0], scale: [sx, 1, sz] });
+  switch (kind) {
+    case 'cap': { const c = toon('#d6443c'); crown(.255, .19, c); m(G.cyl(.16, .16, .014, 32, false), c, { pos: [0, -.075, .25], scale: [1, 1, .95], rot: [.18, 0, 0] }); m(G.sphereLo, toon('#ffffff'), { pos: [0, .12, 0], scale: .02 }); band(.255, -.06, '#ffffff', .008); g.rotation.x = -.08; break }
+    case 'bucket': { const c = toon('#c9b48a'); m(G.cyl(.2, .255, .15, 32), c, { pos: [0, .0, 0] }); m(G.cyl(.205, .2, .012, 32), c, { pos: [0, .075, 0] }); m(G.cyl(.255, .34, .05, 40, true), toon('#c9b48a', { side: THREE.DoubleSide }), { pos: [0, -.095, 0] }); band(.24, -.04, '#7a5a3a'); break }
+    case 'beanie': { crown(.255, .24, toon('#e0705a'), -.08); band(.255, -.06, '#c95440', .028); m(G.sphereLo, toon('#fbf4e6'), { pos: [0, .17, 0], scale: .05 }); break }
+    case 'straw': { const st = toon('#e8c779'); crown(.235, .16, st, -.04); brim(.4, -.05, st, -.04); band(.235, -.02, '#c0392b', .016); break }
+    case 'beret': { m(G.sphere, toon('#2f3e6b'), { pos: [.03, .03, -.01], scale: [.27, .085, .27], rot: [0, 0, -.2] }); m(G.cyl(.008, .012, .03, 8), toon('#2f3e6b'), { pos: [.03, .1, -.01] }); g.position.set(0, .14, 0); break }
+    case 'sunhat': { const c = toon('#f6ead2'); crown(.24, .17, c, -.05); m(G.cyl(.24, .46, .05, 48, true), toon('#f6ead2', { side: THREE.DoubleSide }), { pos: [0, -.075, 0] }); band(.24, -.035, '#f08aa8', .02); m(G.sphereLo, toon('#f08aa8'), { pos: [.2, -.03, .1], scale: .035 }); g.rotation.z = .1; break }
+    case 'catears': { m(G.torus(.248, .012, 8, 40, Math.PI), toon('#2b2a2e'), { pos: [0, -.17, -.02], rot: [-.25, 0, 0] });  // a headband over the top, ear to ear
+      for (const s of [-1, 1]) { const e = node(g, [s * .16, .02, -.06]); e.rotation.z = -s * .45; mesh(G.cone(.06, .1, 4), toon('#2b2a2e', { side: THREE.DoubleSide }), { parent: e, pos: [0, .04, 0] }); mesh(G.cone(.035, .06, 4), toon('#f6a6c1', { side: THREE.DoubleSide }), { parent: e, pos: [0, .035, .012], outline: false }) } break }
+    case 'fedora': { const c = toon('#5b4636'); m(G.cyl(.19, .225, .15, 32), c, { pos: [0, .0, 0], scale: [1, 1, .92] }); m(G.box(.09, .02, .26), c, { pos: [0, .075, 0], outline: false }); band(.226, -.055, '#2b1f17', .016); brim(.33, -.07, c, -.1); break }
+    case 'bowler': { const c = toon('#2b2a2e'); crown(.24, .23, c, -.07); m(G.torus(.255, .02, 8, 40), c, { pos: [0, -.07, 0], rot: [Math.PI / 2, 0, 0] }); band(.242, -.045, '#7a2f2a', .012); break }
+    case 'cowboy': { const c = toon('#a8743f'); m(G.cyl(.18, .225, .17, 32), c, { pos: [0, .01, 0], scale: [1, 1, .9] }); m(G.box(.08, .02, .22), c, { pos: [0, .09, 0], outline: false }); band(.226, -.05, '#5a3a22', .016);
+      brim(.25, -.075, c, 0, 1, 1.25); for (const s of [-1, 1]) m(G.box(.13, .012, .42), c, { pos: [s * .29, -.045, 0], rot: [0, 0, s * .55] }); break }
+    case 'flower': { m(G.torus(.215, .012, 8, 40), toon('#5e9e3e'), { pos: [0, -.02, 0], rot: [Math.PI / 2 - .25, 0, 0] });
+      for (let i = 0; i < 10; i++) { const a = i / 10 * TAU, f = node(g, [Math.sin(a) * .215, -.02 + Math.cos(a) * .052, Math.cos(a) * .215]); mesh(G.sphereLo, toon(['#f6a6c1', '#fff4b0', '#ffffff', '#f08a6a'][i % 4]), { parent: f, scale: [.032, .022, .032] }); mesh(G.sphereLo, toon('#f2c14e'), { parent: f, pos: [0, .012, 0], scale: .011, outline: false }) } break }
+    default: // nón lá: a wide conical leaf hat with woven rings and ribs
+      m(G.cone(.34, .25, 40), toon('#fff', { map: hatTex, side: THREE.DoubleSide }), { pos: [0, .1, 0] });
+      m(G.torus(.338, .009, 6, 48), toon('#c9984d'), { pos: [0, -.025, 0], rot: [Math.PI / 2, 0, 0], outline: false }); g.rotation.set(-.1, 0, .06);
+  }
+  g.userData.rest = [g.rotation.x, g.rotation.z];
   return g;
 }
 
@@ -288,6 +337,8 @@ function torsoTex(o) {
     // shading band at the sides
     const sg = g.createLinearGradient(0, 0, W, 0); sg.addColorStop(0, '#0002'); sg.addColorStop(.25, '#0000'); sg.addColorStop(.75, '#0000'); sg.addColorStop(1, '#0002'); g.fillStyle = sg; g.fillRect(0, 0, W, H);
     if (o.stripes) { g.fillStyle = o.stripes; for (let i = 0; i < 5; i++) g.fillRect(0, yv(.2 + i * .17), W, 18) }
+    // soft folds: the cloth gathers toward the waist and under the arms
+    g.strokeStyle = '#00000016'; g.lineWidth = 7; g.lineCap = 'round'; for (const [x0, y0, x1, y1] of [[.4, .32, .45, .1], [.6, .34, .55, .1], [.18, .78, .26, .56], [.82, .78, .74, .56]]) { g.beginPath(); g.moveTo(W * x0, yv(y0)); g.quadraticCurveTo(W * (x0 + x1) / 2 + 12, yv((y0 + y1) / 2), W * x1, yv(y1)); g.stroke() }
     switch (o.top) {
       case 'tunic': g.strokeStyle = o.trim; g.lineWidth = 5; g.beginPath(); g.moveTo(mid, yv(1)); g.lineTo(mid, yv(.18)); g.stroke(); for (const v of [.82, .64, .46]) { g.fillStyle = o.trim; g.fillRect(mid - 14, yv(v) - 3, 28, 6); g.beginPath(); g.arc(mid + 15, yv(v), 4, 0, TAU); g.fill() } break;
       case 'overalls': g.fillStyle = o.c; g.fillRect(0, yv(.38), W, H); g.fillRect(mid - 52, yv(.82), 104, yv(.38) - yv(.82)); g.fillRect(mid + W / 2 - 52, yv(.8), 104, yv(.38) - yv(.8));
@@ -319,9 +370,33 @@ const torsoShape = lathe([[0, -.035], [.088, -.03], [.112, 0], [.112, .06], [.10
 const shadowMat = () => new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }), discG = new THREE.CircleGeometry(1, 32);
 const charHead = new THREE.SphereGeometry(HEAD_R, 48, 32, -Math.PI / 2, TAU);
 const CHAR = { hip: .3, thigh: .135, shin: .125, foot: .035 };
+// ---------- Smooth limbs ----------
+// An arm or a leg is one tube from the upper joint (y = 0) past the elbow/knee (y = -J) to its end (y = -L), rounded at
+// both ends and skinned to two bones: vertices within `blend` of the joint mix the two, so it bends in a soft curve like
+// a real limb instead of two pieces meeting at a crease. r0 / rj / r1: radius at the top, at the joint, at the end.
+const limbGeo = memo((J, L, r0, rj, r1, blend) => {
+  const pts = [], n = 6;
+  for (let i = 0; i <= n; i++) { const a = Math.PI / 2 * i / n; pts.push([r0 * Math.sin(a), r0 * Math.cos(a) * .8]) }
+  for (let i = 1; i <= 16; i++) { const y = -L * i / 16; pts.push([y > -J ? lerp(r0, rj, -y / J) : lerp(rj, r1, (-y - J) / (L - J)), y]) }
+  for (let i = 1; i <= n; i++) { const a = Math.PI / 2 * i / n; pts.push([r1 * Math.cos(a), -L - r1 * Math.sin(a) * .8]) }
+  const g = lathe(pts.reverse(), 18), p = g.attributes.position, si = [], sw = [];
+  for (let i = 0; i < p.count; i++) { const k = clamp((-J + blend - p.getY(i)) / (2 * blend), 0, 1), w = k * k * (3 - 2 * k); si.push(0, 1, 0, 0); sw.push(1 - w, w, 0, 0) }
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4)); return g;
+});
+// The ink outline of a skinned tube must bend with the bones too.
+const outlineSkinMat = new THREE.ShaderMaterial({ uniforms: outlineMat.uniforms, side: THREE.BackSide, fragmentShader: outlineMat.fragmentShader,
+  vertexShader: '#include <common>\n#include <skinning_pars_vertex>\nuniform float thickness;void main(){\n#include <beginnormal_vertex>\n#include <skinbase_vertex>\n#include <skinnormal_vertex>\n#include <begin_vertex>\n#include <skinning_vertex>\nvec4 mv=modelViewMatrix*vec4(transformed,1.);vec3 n=normalize(normalMatrix*objectNormal);mv.xyz+=n*thickness;gl_Position=projectionMatrix*mv;}' });
+const bone = (parent, pos) => { const b = new THREE.Bone(); b.position.set(...pos); parent.add(b); return b };
+// Skin a tube to two bones (b1 a child of b0), bound while both are unrotated: that pose is the tube's rest shape.
+function skinLimb(b0, b1, geo, mat) {
+  const parent = b0.parent, skel = new THREE.Skeleton([b0, b1]), keep = [b0.rotation.clone(), b1.rotation.clone()]; b0.rotation.set(0, 0, 0); b1.rotation.set(0, 0, 0);
+  const out = [mat, outlineSkinMat].map((m, i) => { const sm = new THREE.SkinnedMesh(geo, m); sm.position.copy(b0.position); sm.frustumCulled = false; if (i) sm.renderOrder = -1; parent.add(sm); return sm });
+  parent.updateMatrixWorld(true); out.forEach(sm => sm.bind(skel)); b0.rotation.copy(keep[0]); b1.rotation.copy(keep[1]); return out[0];
+}
 function outfitSpec(look) {
   const R = window.AvatarRig, g = look.gender === 'male' ? 'male' : 'female', O = R?.outfits || {}, raw = O[look.outfit] || O.base || {}, o = {};
   for (const k in raw) { const v = raw[k]; o[k] = v && typeof v === 'object' && !Array.isArray(v) ? (v[g] ?? v.female) : v }
+  o.hat = look.hat && look.hat !== 'none' ? look.hat : look.hat === 'none' ? 0 : o.hat ? 'nonla' : 0;
   o.gender = g; o.hair = look.hair || (g === 'male' ? 'short' : 'bob'); o.shoeKey = look.shoe || o.shoe || 'sandals'; o.shoe = (R?.shoes || {})[o.shoeKey] || { type: 'sandal', c: '#8b5a33', c2: '#6b4226' };
   return o;
 }
@@ -329,7 +404,8 @@ class Character {
   constructor(view, look) { this.view = view; this.root = node(view.root); this.st = { phase: 0, w: 0, run: 0, yaw: .45, yawTo: .45, t: Math.random() * 9, blinkAt: 2, blink: 0, cheer: 0, jump: 0, lean: { x: 0, v: 0 }, head: { x: 0, v: 0 }, look: { x: 0, v: 0 }, lookTo: 0, lookAt: 2, weight: { x: 0, v: 0 }, weightTo: 0, weightAt: 3, sway: [] }; this.setLook(look) }
   setLook(look) {
     const key = JSON.stringify(look); if (key === this.key) return; this.key = key;
-    this.root.clear(); const o = this.o = outfitSpec(look), skin = toon(SKIN), sk2 = toon(SKIN_SH), hairMat = toon(HAIR), c1 = toon(o.c), c2 = toon(o.c2 || o.c), pants = toon(o.b || '#7a5236');
+    this.root.traverse(m => m.isSkinnedMesh && m.skeleton.dispose());  // free the old limbs' bone textures
+    this.root.clear(); const o = this.o = outfitSpec(look), skin = toon(SKIN), sk2 = toon(SKIN_SH), hairMat = toon('#fff', { map: hairTex }), c1 = toon(o.c), c2 = toon(o.c2 || o.c), pants = toon(o.b || '#7a5236');
     const R = this.root, P = this.parts = {};
     // shadow
     if (!this.shadow) { const sh = new THREE.Mesh(discG, shadowMat()); sh.rotation.x = -Math.PI / 2; sh.position.y = .002; this.view.root.add(sh); this.shadow = sh }
@@ -344,20 +420,26 @@ class Character {
     // neck + head
     P.neck = node(P.spine, [0, .235, 0]);
     mesh(G.cyl(.032, .036, .05), skin, { parent: P.neck, pos: [0, .015, 0], outline: false });
+    // collars: the áo dài's standing mandarin collar with a trim line, a ribbed crew neck on tees and tunics
+    if (o.top === 'aodai') { mesh(G.cyl(.04, .043, .04, 20), c2, { parent: P.neck, pos: [0, .012, 0] }); mesh(G.torus(.041, .004, 6, 24), toon(o.motif || o.c2), { parent: P.neck, pos: [0, .031, 0], rot: [Math.PI / 2, 0, 0], outline: false }) }
+    else if (['tee', 'tunic', 'sash', 'overalls'].includes(o.top)) mesh(G.torus(.044, .008, 6, 24), toon(shade(o.top === 'overalls' ? o.under : o.c, .86)), { parent: P.spine, pos: [0, .232, 0], rot: [Math.PI / 2, 0, 0], outline: false });
     P.head = node(P.neck, [0, .2, .005]);
     this.faces = faces(o.gender);
     const headGeo = charHead;
         P.face = mesh(headGeo, toon('#fff', { map: this.faces.open, unique: true }), { parent: P.head, scale: [1.05, .96, .98] });
-    const hairStyle = o.hat ? (o.gender === 'male' ? 'short' : 'bob') : o.hair;
-    if (!['bob', 'wave', 'side'].includes(hairStyle)) for (const s of [-1, 1]) mesh(G.sphere, skin, { parent: P.head, pos: [s * .222, -.02, .0], scale: [.03, .045, .035] });
-    this.chain = o.hat ? [] : buildHair(P.head, o.hair, hairMat);
-    if (o.hat) { buildHair(P.head, o.gender === 'male' ? 'short' : 'bob', hairMat); buildHat(P.head) }
+    // the chosen cut shows under the nón lá too (a ponytail or braid comes out below the brim)
+    const hairStyle = o.hair, coversEars = ['bob', 'wave'].includes(hairStyle) || (hairStyle === 'side' && o.gender !== 'male');
+    if (!coversEars) for (const s of [-1, 1]) mesh(G.sphere, skin, { parent: P.head, pos: [s * .222, -.02, .0], scale: [.03, .045, .035] });
+    this.chain = buildHair(P.head, hairStyle, hairMat, o.gender, !!HAT_COVER[o.hat]); this.hat = o.hat ? buildHat(P.head, o.hat) : null; this.curtains = this.chain.curtains;
     // arms: shoulder → upper arm → elbow → forearm + hand
     const sleeve = o.top === 'overalls' ? toon(o.under) : c1, longSleeve = ['long'].includes(o.sleeve) || o.top === 'aodai', sleeveMat = o.top === 'track' ? toon('#fff', { map: memoTex('stripe' + o.c + o.stripe, () => stripeTex(o.c, o.stripe)) }) : o.stripes ? toon('#fff', { map: memoTex('band' + o.c + o.stripes, () => bandTex(o.c, o.stripes)) }) : sleeve;
     P.arms = [-1, 1].map(s => {
-      const sh = node(P.spine, [s * .105, .2, 0]), up = mesh(G.cap(.03, .05), sleeveMat, { parent: sh, pos: [0, -.04, 0] });
-      const el = node(sh, [0, -.085, 0]), fore = mesh(G.cap(.027, .045), longSleeve ? sleeveMat : skin, { parent: el, pos: [0, -.03, 0] });
-      if (longSleeve) mesh(G.cyl(.031, .031, .016), toon(o.c2 || o.c), { parent: el, pos: [0, -.058, 0] });
+      const sh = bone(P.spine, [s * .105, .2, 0]), el = bone(sh, [0, -.085, 0]);
+      if (longSleeve) { skinLimb(sh, el, limbGeo(.085, .135, .031, .029, .028, .022), sleeveMat); mesh(G.cyl(.031, .031, .016), toon(o.c2 || o.c), { parent: el, pos: [0, -.058, 0] }) }
+      else {             // bare forearm under a short sleeve (the sleeve stays stiff above the elbow)
+        skinLimb(sh, el, limbGeo(.085, .14, .027, .024, .022, .022), skin); mesh(G.cap(.03, .05), sleeveMat, { parent: sh, pos: [0, -.04, 0] });
+        mesh(G.cyl(.034, .037, .014, 16), toon(shade(o.top === 'overalls' ? o.under : o.c, .88)), { parent: sh, pos: [0, -.078, 0], outline: false });  // sleeve hem
+      }
       const hand = mesh(G.sphere, skin, { parent: el, pos: [0, -.075, 0], scale: [.033, .035, .031] });
       sh.rotation.z = s * .18; return { sh, el, hand, s };
     });
@@ -365,24 +447,28 @@ class Character {
     const shorts = o.bottom === 'shorts', skirt = o.bottom === 'skirt', dress = o.top === 'aodai', bare = !shorts && !skirt;
     const legMat = o.bottom === 'track' ? toon('#fff', { map: memoTex('stripe' + o.b + o.stripe, () => stripeTex(o.b, o.stripe || '#fff')) }) : pants;
     P.legs = [-1, 1].map(s => {
-      const hip = node(P.body, [s * .05, -.01, 0]), thigh = mesh(G.cap(skirt ? .032 : shorts ? .042 : .038, CHAR.thigh - .04), skirt ? skin : legMat, { parent: hip, pos: [0, -CHAR.thigh / 2, 0] });
-      const knee = node(hip, [0, -CHAR.thigh, 0]), shin = mesh(G.cap(.031, CHAR.shin - .04), bare ? legMat : skin, { parent: knee, pos: [0, -CHAR.shin / 2, 0] });
-      if (shorts) mesh(G.cyl(.05, .053, .03), legMat, { parent: hip, pos: [0, -CHAR.thigh * .62, 0] });
+      // one tube from hip to ankle: trousers when the legs are covered, skin under shorts and skirts
+      const hip = bone(P.body, [s * .05, -.01, 0]), knee = bone(hip, [0, -CHAR.thigh, 0]), wide = ['wide', 'baggy'].includes(o.bottom), Lg = CHAR.thigh + CHAR.shin - .005;
+      skinLimb(hip, knee, bare ? limbGeo(CHAR.thigh, Lg, wide ? .05 : .04, wide ? .046 : .034, wide ? .05 : .034, .03) : limbGeo(CHAR.thigh, Lg, .034, .028, .025, .03), bare ? legMat : skin);
+      if (shorts) { mesh(G.cap(.042, .05), legMat, { parent: hip, pos: [0, -.055, 0] }); mesh(G.cyl(.05, .053, .03), legMat, { parent: hip, pos: [0, -.1, 0] }) }
       if (o.cuff) mesh(G.cyl(.04, .04, .022), toon(o.cuff), { parent: knee, pos: [0, -CHAR.shin + .03, 0] });
+      else if (bare) { mesh(G.cyl(wide ? .046 : .036, wide ? .052 : .039, .016, 16), toon(o.b2 || o.b || '#6d4329'), { parent: knee, pos: [0, -CHAR.shin + .026, 0] }) }  // trouser hem
       const ankle = node(knee, [0, -CHAR.shin, 0]); buildShoe(ankle, o.shoe, skin);
       return { hip, knee, ankle, s };
     });
     if (skirt) P.skirt = mesh(G.cyl(.115, .17, .1, 32, true), toon('#fff', { map: memoTex('skirt' + o.b + o.motif, () => canvasTex(256, 64, (g, W, H) => { g.fillStyle = o.b; g.fillRect(0, 0, W, H); g.fillStyle = o.motif || '#f2d6a8'; for (let i = 0; i < 18; i++) { g.beginPath(); g.arc((i * 37) % W, 10 + (i * 23) % 48, 3.5, 0, TAU); g.fill() } })), side: THREE.DoubleSide }), { parent: P.body, pos: [0, -.03, 0] });
-    if (o.bottom === 'wide' || o.bottom === 'baggy') for (const L of P.legs) L.hip.children[0].scale.set(1.25, 1, 1.25);
+    if (o.bottom === 'jeans' && !['aodai', 'overalls'].includes(o.top)) { mesh(G.torus(.11, .008, 6, 32), toon('#6b4226'), { parent: P.body, pos: [0, .006, 0], rot: [Math.PI / 2, 0, 0], scale: [1, .84, 1] }); mesh(G.box(.022, .016, .006), toon('#e3c35a'), { parent: P.body, pos: [0, .006, .094], outline: false }) }  // belt
     // áo dài: front and back panels from the waist, swaying with the stride
     if (dress) {
-      const panTex = memoTex('panel' + o.c + o.motif, () => canvasTex(128, 256, (g, W, H) => { g.fillStyle = o.c; g.fillRect(0, 0, W, H); motifs(g, o.motif, [[W * .5, H * .35, 1.3], [W * .3, H * .7, 1], [W * .7, H * .85, .8]]) }));
-      P.panels = [1, -1].map(z => { const p = node(P.body, [0, .015, z * .07]); mesh(G.box(.17, .22, .012), toon('#fff', { map: panTex }), { parent: p, pos: [0, -.11, 0] }); return p });
+      // each panel is two pieces hinged at mid-thigh, so the hem bends and lags behind the upper half
+      const panTex = (half, at) => toon('#fff', { map: memoTex('panel' + half + o.c + o.motif, () => canvasTex(128, 128, (g, W, H) => { g.fillStyle = o.c; g.fillRect(0, 0, W, H); motifs(g, o.motif, at.map(([x, y, k]) => [W * x, H * y, k])) })) });
+      const up = panTex('u', [[.5, .7, 1.3]]), lo = panTex('l', [[.3, .4, 1], [.7, .75, .8]]);
+      P.panels = [1, -1].map(z => { const p = node(P.body, [0, .015, z * .07]); mesh(G.box(.17, .11, .012), up, { parent: p, pos: [0, -.055, 0] }); p.lo = node(p, [0, -.11, 0]); mesh(G.box(.175, .115, .012), lo, { parent: p.lo, pos: [0, -.0575, 0] }); return p });
     }
     this.view.dirty = true;
   }
   cheer() { this.st.cheerT = 0 }
-  // Fixed poses for still pictures: 'fish' sits on a low stool holding a fishing rod out in front.
+  // Fixed poses for still pictures: 'fish' sits on a low stool holding a fishing rod out in front; 'sit' sits (on a park bench or swing).
   setPose(pose) {
     this.pose = pose; const P = this.parts; if (!P || pose !== 'fish' || P.rod) return;
     const stool = node(this.root, [0, 0, -.02]); mesh(G.cyl(.09, .08, .025), toon('#c08a52'), { parent: stool, pos: [0, .15, 0] }); for (const [x, z] of [[-.06, -.05], [.06, -.05], [-.06, .05], [.06, .05]]) mesh(G.cyl(.012, .012, .15), toon('#94623a'), { parent: stool, pos: [x, .075, z] });
@@ -401,10 +487,15 @@ class Character {
     const moving = speed > .04; st.w = approach(st.w, moving ? 1 : 0, moving ? 8 : 6, dt); st.run = approach(st.run, clamp((speed - 1.5) / .8, 0, 1), 4, dt);
     const prev = st.phase; st.phase = (st.phase + speed * dt / lerp(.5, .78, st.run)) % 1; const stepped = moving && Math.floor(prev * 2) !== Math.floor(st.phase * 2);
     const w = st.w, rw = st.run, idle = 1 - w, p = st.phase * TAU;
-    // turn toward the way it walks; when standing, settle three-quarters to the viewer on the side it was facing
-    if (this.fixedYaw !== undefined) st.yawTo = this.fixedYaw;
+    // turn toward the way it walks; when standing, settle three-quarters to the viewer on the side it was facing (or the
+    // fixed way a still picture faces — walking still turns it, so park farmers face where they go)
+    if (this.fixedYaw !== undefined) { if (!moving) st.yawTo = this.fixedYaw }
     else if (!moving) { const side = Math.sin(st.yawTo) >= 0 ? 1 : -1; if (st.w < .3) st.yawTo = approach(st.yawTo, side * .5, 2.5, dt) }
     st.yaw += angleTo(st.yaw, st.yawTo) * (1 - Math.exp(-(moving ? 12 : 5) * dt)); this.root.rotation.y = st.yaw;
+    // what the loose parts feel: walk wind (drag), speeding up / braking (surge), turning (swing), a light breeze
+    const acc = st.acc = approach(st.acc || 0, dt > 0 ? (speed - (st.vPrev ?? speed)) / dt : 0, 12, dt), turn = st.turn = approach(st.turn || 0, dt > 0 ? angleTo(st.yawPrev ?? st.yaw, st.yaw) / dt : 0, 10, dt); st.vPrev = speed; st.yawPrev = st.yaw;
+    const drag = clamp(speed * .22, 0, .55), surge = clamp(acc * .06, -.5, .5), swing = clamp(-turn * speed * .12, -.35, .35), breeze = .035 * Math.sin(st.t * 1.4) + .015 * Math.sin(st.t * 3.3 + 1);
+    const cl = st.cl || (st.cl = {}), sp = (key, target, k, c) => spring(cl[key] || (cl[key] = { x: 0, v: 0 }), target, k, c, dt);
     // blink / happy face
     st.blinkAt -= dt; if (st.blinkAt <= 0) { st.blinkT = 0; st.blinkAt = 2 + Math.random() * 3.5 }
     if (st.blinkT !== undefined) { st.blinkT += dt; if (st.blinkT > .13) delete st.blinkT }
@@ -418,7 +509,7 @@ class Character {
     const stride = lerp(.12, .2, rw) * w, lift = lerp(.04, .085, rw) * w, u = 2 * p - .5, low = (1 + Math.cos(u)) / 2;
     const hipY = CHAR.hip - w * lerp(.006, .016, rw) * low + w * lerp(.004, .02, rw) * (1 - low) - Math.abs(wt) * .006 + st.jump;
     P.body.position.y = hipY; P.body.position.x = wt * .012;
-    P.body.rotation.z = -wt * .05 + w * .03 * Math.sin(p); P.body.rotation.y = w * .12 * Math.sin(p);
+    P.body.rotation.z = -wt * .05 + w * .03 * Math.sin(p) + clamp(-turn * speed * .03, -.12, .12);  // bank into turns P.body.rotation.y = w * .12 * Math.sin(p);
     P.legs.forEach((L, i) => {
       const ph = p + (i ? Math.PI : 0), f = Math.cos(ph), swing = Math.sin(ph) < 0, up = swing ? Math.pow(-Math.sin(ph), 1.2) : 0;
       const fz = f * stride, fy = -hipY + CHAR.foot * .6 + up * lift + (st.jump > 0 ? st.jump * .4 : 0);
@@ -428,7 +519,7 @@ class Character {
       L.ankle.rotation.x = -(a1 + a2) + (swing ? -.3 * up : f > 0 ? -.25 * f * w : .45 * -f * w);
     });
     // torso: counter-twist, lean into the walk, breathe
-    const lean = spring(st.lean, w * lerp(.1, .3, rw), 46, 7.5, dt);
+    const lean = spring(st.lean, w * lerp(.1, .3, rw) + clamp(-acc * .025, 0, .15), 46, 7.5, dt);  // pitch forward when braking hard
     P.spine.rotation.x = lean; P.spine.rotation.y = -w * .2 * Math.sin(p); P.spine.rotation.z = w * .03 * Math.sin(p) + wt * .04;
     P.torso.scale.y = 1 + idle * .012 * br;
     // head: steady against the body, a lagging bounce, glances around when idle
@@ -440,15 +531,40 @@ class Character {
       A.sh.rotation.x = lerp(-sw + idle * .03 * br, -2.7, st.cheer); A.sh.rotation.z = A.s * (lerp(.16, .3, rw * w) + idle * .02 * br + st.cheer * .25);
       A.el.rotation.x = -(lerp(.15, .9, rw) * w + .1) * (1 - st.cheer) - Math.max(0, sw) * .4;
     });
-    // hanging hair and dress panels swing after the body
-    this.chain.forEach((s, i) => { const k = st.sway[i] || (st.sway[i] = { x: 0, v: 0 }); s.rotation.z = spring(k, -w * .25 * Math.sin(p * 2 - i * .6) - (i === 0 ? lean * .3 : 0), 40, 5, dt) * .6 });
-    if (P.panels) P.panels.forEach((pn, i) => { pn.rotation.x = (i ? -1 : 1) * (w * .25 * Math.max(0, Math.cos(p + i * Math.PI)) + lean * .5) });
-    if (P.skirt) P.skirt.rotation.z = w * .04 * Math.sin(p);
+    // Loose parts are springs that lag the body. Angles about x: positive swings the lower end backward.
+    // Tails and braids: sideways with the stride, back in the walk wind, bouncing with the hips, on forward when stopping.
+    this.chain.forEach((s, i) => {
+      const k = st.sway[i] || (st.sway[i] = { x: 0, v: 0 }); s.rotation.z = spring(k, -w * .25 * Math.sin(p * 2 - i * .6) - (i === 0 ? lean * .3 : 0) + swing * .3, 40, 5, dt) * .6;
+      s.userData.rx0 ??= s.rotation.x; s.rotation.x = s.userData.rx0 + sp('hx' + i, (drag * .9 + surge + breeze - w * .12 * Math.cos(u)) / this.chain.length, 36 - i * 3, 4.5);
+    });
+    for (const [i, c] of this.curtains.entries()) { c.rotation.x = clamp(sp('cx' + i, drag * .12 + surge * .2 + breeze * .4, 30, 4), -.04, .18); c.rotation.z = sp('cz' + i, swing * .2 + w * .03 * Math.sin(p), 30, 4) }
+    // áo dài: the back panel streams behind and is pushed by the trailing leg; the front one is kicked forward by the
+    // leading knee and pressed onto the legs by the wind. The hem (lower piece) is softer, so it bends and lags.
+    if (P.panels) {
+      const kick = Math.abs(P.legs[0].hip.rotation.x - P.legs[1].hip.rotation.x) / 2, push = kick;  // how far the legs are apart (0 standing)
+      P.panels.forEach((pn, i) => {
+        const front = !i, a = sp('pa' + i, (front ? -kick * .8 + drag * .15 : drag + push * .6) + surge + breeze * (1 + i), 38, 5);
+        pn.rotation.x = front ? clamp(a, -1.1, .12) : clamp(a, -.6, 1); pn.rotation.z = sp('pz' + i, swing + breeze * .5, 30, 4);
+        pn.lo.rotation.x = clamp(sp('pl' + i, (front ? -kick * .3 : drag * .45) + surge * .8 + breeze * 1.5, 22, 3), front ? -.8 : -.5, front ? .25 : .7);
+      });
+    }
+    if (P.skirt) { P.skirt.rotation.z = sp('sz', w * .04 * Math.sin(p) + swing * .2, 40, 5); P.skirt.rotation.x = sp('sx', drag * .12 + surge * .15 + breeze * .3, 40, 5); const fl = 1 + w * .05 + Math.min(.08, Math.abs(swing) * .2); P.skirt.scale.set(fl, 1, fl) }
+    // nón lá: sits loosely, so it bobs a beat after the head; the wind lifts the front brim, braking tips it forward
+    if (this.hat) { const [rx, rz] = this.hat.userData.rest; this.hat.rotation.x = rx + sp('hatx', -hb * 1.2 - drag * .12 - surge * .1, 70, 6); this.hat.rotation.z = rz + sp('hatz', w * .05 * Math.sin(p) + swing * .1, 60, 5) }
     // ground shadow
-    if (this.pose === 'fish') {                                         // sitting: thighs forward, shins down, both hands on the rod
+    // moves with another farmer (park): a punch jabs with alternate fists straight ahead (it faces the other), a hit throws
+    // the arms up, holding hands reaches the arm on the partner's side (move.dir: -1 left, +1 right on screen) out to
+    // them, a kiss folds the hands behind the back
+    const mv = this.move; if (mv) { const k = st.t - mv.t0; P.arms.forEach((A, i) => {
+      if (mv.kind === 'punch') { const j = Math.max(0, Math.sin(k * 7 + i * Math.PI)) ** .6; A.sh.rotation.set(-.35 - 1.25 * j, 0, A.s * (.1 - .06 * j)); A.el.rotation.x = -1.7 * (1 - j) - .05 }
+      else if (mv.kind === 'hit') { const h = .55 + .45 * Math.sin(k * 5.7); A.sh.rotation.set(.35 * h - .2, 0, A.s * (.25 + .7 * h)); A.el.rotation.x = -.4 }
+      else if (mv.kind === 'hand' && A.s === mv.dir) { A.sh.rotation.set(-.2 + .08 * Math.sin(k * 5), 0, A.s * .78); A.el.rotation.x = -.12 }
+      else if (mv.kind === 'kiss') { A.sh.rotation.set(.45, 0, A.s * .12); A.el.rotation.x = -.9 }
+    }) }
+    if (this.pose === 'fish' || this.pose === 'sit') {                  // sitting: thighs forward, shins down; both hands on the rod, or resting on the knees
       P.body.position.set(0, .2, -.02); P.body.rotation.set(0, 0, 0); P.spine.rotation.set(.05, 0, 0);
       P.legs.forEach(L => { L.hip.rotation.set(-1.45, 0, L.s * .12); L.knee.rotation.x = 1.45; L.ankle.rotation.x = 0 });
-      P.arms.forEach((A, i) => { A.sh.rotation.set(-1.1, 0, A.s * -.18); A.el.rotation.x = -.55 });
+      const rod = this.pose === 'fish'; P.arms.forEach(A => { A.sh.rotation.set(rod ? -1.1 : -.5, 0, A.s * (rod ? -.18 : -.08)); A.el.rotation.x = rod ? -.55 : -.75 });
       P.neck.rotation.set(.12 + .02 * br, .1, 0);
     }
     const hgt = Math.max(0, hipY - CHAR.hip); this.shadow.scale.set(.17 * (1 - hgt * 3), .12 * (1 - hgt * 3), 1); this.shadow.material.opacity = 1 - hgt * 5;
@@ -465,12 +581,30 @@ function ik2(z, y, a, b) {
 }
 const shadowTex = canvasTex(64, 64, (g, W, H) => { const gr = g.createRadialGradient(W / 2, H / 2, 2, W / 2, H / 2, W / 2); gr.addColorStop(0, '#3b2a1266'); gr.addColorStop(.6, '#3b2a1230'); gr.addColorStop(1, '#3b2a1200'); g.fillStyle = gr; g.fillRect(0, 0, W, H) });
 function buildShoe(ankle, sh, skin) {
-  const f = node(ankle, [0, -.01, .012]), c = toon(sh.c), c2 = toon(sh.c2 || sh.c);
+  const f = node(ankle, [0, -.01, .012]), c = toon(sh.c), c2 = toon(sh.c2 || sh.c), fine = { outline: false };
+  const sole = (h, mat) => mesh(G.cyl(.042, .044, h, 20), mat, { parent: f, pos: [0, -.036 + h / 2, .014], scale: [1, 1, 1.45] });
   switch (sh.type) {
-    case 'boot': mesh(G.cyl(.04, .038, .085), c, { parent: f, pos: [0, .03, -.006] }); mesh(G.sphere, c, { parent: f, pos: [0, -.008, .012], scale: [.044, .03, .06] }); mesh(G.cyl(.046, .046, .012), c2, { parent: f, pos: [0, -.032, .012], scale: [1, 1, 1.35] }); break;
-    case 'sandal': mesh(G.sphere, skin, { parent: f, pos: [0, -.006, .012], scale: [.036, .024, .055] }); mesh(G.cyl(.042, .042, .012), c, { parent: f, pos: [0, -.03, .012], scale: [1, 1, 1.38] }); for (const z of [-.005, .03]) mesh(G.torus(.035, .007, 6, 18, Math.PI), c2, { parent: f, pos: [0, -.03, z], rot: [0, 0, 0], scale: [1.05, .7, 1] }); break;
-    case 'sneaker': mesh(G.sphere, c, { parent: f, pos: [0, -.008, .012], scale: [.042, .032, .062] }); mesh(G.cyl(.044, .044, .016), toon(sh.sole || '#e8e0d0'), { parent: f, pos: [0, -.03, .012], scale: [1, 1, 1.42] }); if (sh.stripe) mesh(G.cyl(.043, .043, .006), toon(sh.stripe), { parent: f, pos: [0, -.012, .012], scale: [1, 1, 1.4], outline: false }); break;
-    default: mesh(G.sphere, c, { parent: f, pos: [0, -.01, .012], scale: [.04, .028, .06] }); mesh(G.cyl(.042, .042, .01), c2, { parent: f, pos: [0, -.03, .012], scale: [1, 1, 1.4] }); if (sh.strap) mesh(G.torus(.035, .006, 6, 16, Math.PI), toon(sh.strap), { parent: f, pos: [0, -.018, .02], scale: [1.1, .9, 1] });
+    case 'boot':      // shaft with a folded cuff, rounded toe, sole and a raised heel block
+      mesh(G.cyl(.041, .038, .085, 18), c, { parent: f, pos: [0, .03, -.006] }); mesh(G.torus(.041, .009, 8, 22), c2, { parent: f, pos: [0, .072, -.006], rot: [Math.PI / 2, 0, 0] });
+      mesh(G.sphere, c, { parent: f, pos: [0, -.008, .016], scale: [.044, .032, .062] }); sole(.014, c2); mesh(G.box(.05, .012, .03), c2, { parent: f, pos: [0, -.024, -.03] });
+      break;
+    case 'sandal':    // footbed, two straps crossing over the toes, a heel strap (quai hậu)
+      sole(.012, c2); mesh(G.cyl(.04, .042, .004, 20), c, { parent: f, pos: [0, -.023, .014], scale: [1, 1, 1.42], ...fine });
+      mesh(G.sphere, skin, { parent: f, pos: [0, -.008, .016], scale: [.035, .02, .056] });
+      for (const s of [-1, 1]) mesh(G.box(.072, .008, .012), c, { parent: f, pos: [0, .009, .03], rot: [0, s * .5, 0] });
+      mesh(G.torus(.034, .005, 6, 18, Math.PI), c, { parent: f, pos: [0, -.012, -.01], rot: [-Math.PI / 2, 0, 0], scale: [1.1, .9, 1] });
+      break;
+    case 'sneaker':   // chunky sole with a toe bumper, padded collar, laces, heel tab, side stripes
+      sole(.016, toon(sh.sole || '#e8e0d0')); mesh(G.sphere, toon(sh.sole || '#e8e0d0'), { parent: f, pos: [0, -.022, .068], scale: [.034, .014, .02] });
+      mesh(G.sphere, c, { parent: f, pos: [0, -.006, .01], scale: [.041, .03, .064] }); mesh(G.cyl(.036, .04, .03, 16), c, { parent: f, pos: [0, .012, -.02] });
+      for (let i = 0; i < 3; i++) mesh(G.box(.03, .005, .006), toon(sh.lace || '#fff'), { parent: f, pos: [0, .0235 - i * .003, .028 + i * .011], rot: [-.35, 0, 0], ...fine });
+      mesh(G.box(.012, .02, .008), c2, { parent: f, pos: [0, .01, -.052] });
+      if (sh.stripe) for (const s of [-1, 1]) mesh(G.box(.004, .012, .05), toon(sh.stripe), { parent: f, pos: [s * .04, -.008, .012], ...fine });
+      break;
+    default:          // loafer: low cut, sole and heel, a strap across the instep, a polished gleam
+      mesh(G.sphere, c, { parent: f, pos: [0, -.012, .014], scale: [.04, .026, .062] }); sole(.01, c2); mesh(G.box(.046, .01, .026), c2, { parent: f, pos: [0, -.026, -.032] });
+      mesh(G.torus(.034, .005, 6, 16, Math.PI), toon(sh.strap || sh.c2), { parent: f, pos: [0, -.012, .03], scale: [1.1, .9, 1] });
+      mesh(G.sphere, toon(sh.shine || '#fff'), { parent: f, pos: [.012, .006, .04], scale: [.01, .004, .014], ...fine });
   }
 }
 
@@ -755,24 +889,108 @@ class Animal {
   }
 }
 
+// ---------- Barn pens: the same toon look as the herd ----------
+// Two layers like the painted pens: yard, shelter and back/side fences under the herd (back), the front fence over it
+// (front). Model units: 1 = box height; the yard's inside spans the herd area that game.js lays out in % of the box.
+// The yard is as wide as the box allows (rebuilt, not stretched, so shelters and posts keep their shape).
+// Each herd gets its own pen: ground, fence style, shelter and what the animals need.
+const PEN = { D: .5, pitch: .45, center: [0, .06] };
+const PEN_KIND = {
+  chicken: { ground: '#ddb985', fence: 'wire' }, duck: { ground: '#dcc496', fence: 'low' }, cow: { ground: '#d2a86b', fence: 'rail' },
+  goat: { ground: '#c4b090', fence: 'tall' }, sheep: { ground: '#e0c58a', fence: 'picket' }, buffalo: { ground: '#b58a5e', fence: 'plank' } // buffalo = the pig pen
+};
+const thatchTex = memoTex('thatch', () => { const t = bandTex('#e8b65a', '#c98f36'); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 5); return t });
+// Shingle rows running along the ridge (stripes across the prism's sides).
+const shingles = (base, line) => toon('#ffffff', { map: memoTex('roof' + base, () => { const t = stripeTex(base, line); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12, 1); return t }) });
+const wireTex = memoTex('wire', () => { const t = canvasTex(32, 32, (g, w, h) => { g.strokeStyle = '#e4e2da'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(0, 0); g.lineTo(w, h); g.moveTo(w, 0); g.lineTo(0, h); g.stroke() }); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(14, 2); return t });
+function penModel(back, front, kind, accent) {
+  const { D } = PEN, { ground, fence: style } = PEN_KIND[kind] || PEN_KIND.cow, B = back.root, Fr = front.root;
+  const wood = toon('#b07a43'), rail = toon('#946132'), dark = toon('#4a2f1a'), white = toon('#f4ecdc'), thatch = toon('#ffffff', { map: thatchTex });
+  const wire = toon('#ffffff', { map: wireTex, transparent: true, alphaTest: .4, side: THREE.DoubleSide }), water = toon('#6cc3e0'), hay = toon('#8fc35a');
+  const rim = toon('#' + new THREE.Color(accent).lerp(new THREE.Color('#c99a5e'), .3).getHexString());
+  const H = { low: .1, tall: .19, plank: .11, wire: .14, picket: .12, rail: .15 }[style], RAILS = { low: [.06], tall: [.06, .12, .17], plank: [.1], wire: [.13], picket: [.05, .095], rail: [.055, .11] }[style];
+  const fence = (parent, x0, z0, x1, z1) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / (style === 'picket' ? .09 : .2))), rot = [0, -Math.atan2(z1 - z0, x1 - x0), 0], mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, post = style === 'picket' ? white : wood;
+    for (let i = 0; i <= n; i++) { const x = lerp(x0, x1, i / n), z = lerp(z0, z1, i / n); mesh(G.cyl(.018, .022, H, 8), post, { parent, pos: [x, H / 2, z] }); if (style === 'picket') mesh(G.cyl(0, .018, .03, 8), white, { parent, pos: [x, H + .015, z] }) }
+    for (const y of RAILS) mesh(G.box(len, .02, .014), style === 'picket' ? white : rail, { parent, pos: [mx, y, mz], rot });
+    if (style === 'wire') mesh(G.box(len, .11, .003), wire, { parent, pos: [mx, .065, mz], rot, outline: false });
+    if (style === 'plank') mesh(G.box(len, .07, .016), wood, { parent, pos: [mx, .045, mz], rot });
+  };
+  const box = (parent, size, mat, pos, o = {}) => mesh(G.box(...size), mat, { parent, pos, ...o });
+  // A three-sided prism lying along x (apex up) is a gable roof; along z it is an A-frame hut seen from its end.
+  const gable = (parent, r, len, y, mat) => mesh(G.cyl(r, r, len, 3), mat, { parent, pos: [0, y, 0], rot: [-Math.PI / 2, 0, Math.PI / 2] });
+  const trough = (x, z, fill) => { const t = node(B, [x, 0, z]); box(t, [.24, .06, .1], wood, [0, .03, 0]); box(t, [.2, .012, .07], fill, [0, .062, 0], { outline: false }) };
+  const shed = x => { const h = node(B, [x, 0, -.4]); box(h, [.32, .15, .2], wood, [0, .075, 0]); box(h, [.08, .1, .01], dark, [.07, .05, .101], { outline: false }); for (const y of [.05, .1]) box(h, [.32, .005, .004], rail, [0, y, .101], { outline: false }); gable(h, .13, .42, .215, thatch); mesh(G.cyl(.016, .016, .44, 8), toon('#b97f2e'), { parent: h, pos: [0, .345, 0], rot: [0, 0, Math.PI / 2] }) };
+  const build = k => {
+    B.clear(); Fr.clear(); const W = .42 * k, xL = -W + .18, xR = W - .14;
+    // ground: soft shadow, a rim in the pen's colour, the herd's own yard with loose straw and pebbles
+    mesh(discG, shadowMat(), { outline: false, parent: B, pos: [0, -.07, .05], rot: [-Math.PI / 2, 0, 0], scale: [.64 * k, .66, 1] });
+    box(B, [W * 2 + .2, .04, 1.18], rim, [0, -.045, 0]); box(B, [W * 2 + .14, .05, 1.12], toon(ground), [0, -.025, 0]);
+    for (const [x, z, r] of [[-.7, .3, 0], [.25, .38, 1], [.8, .1, 0], [-.1, -.15, 1], [.7, .42, 2], [-.8, -.02, 2]]) mesh(G.sphereLo, toon(r === 2 ? '#a9a296' : '#e8c36a'), { parent: B, pos: [x * W, .004, z], scale: r === 2 ? [.018, .012, .015] : [.035, .006, .018], rot: [0, r, 0], outline: r === 2 });
+    const backFrom = kind === 'duck' ? -W : -W + .36; fence(B, backFrom, -D, W, -D); fence(B, -W, -D, -W, D); fence(B, W, -D, W, D); fence(Fr, -W, D, W, D);
+    if (kind === 'chicken') {
+      // red coop on stilts with a slatted ramp, grain in the feeder
+      const c = node(B, [xL, 0, -.38]); for (const [x, z] of [[-.11, -.07], [.11, -.07], [-.11, .07], [.11, .07]]) mesh(G.cyl(.012, .012, .09, 6), wood, { parent: c, pos: [x, .045, z] });
+      box(c, [.26, .13, .17], toon('#c8553d'), [0, .155, 0]); box(c, [.27, .012, .18], white, [0, .09, 0]); box(c, [.06, .07, .01], dark, [.05, .14, .086], { outline: false }); gable(c, .12, .34, .28, shingles('#9a4330', '#6e2a1d'));
+      const ramp = node(c, [.05, .05, .16]); ramp.rotation.x = .55; box(ramp, [.06, .008, .19], wood, [0, 0, 0]); for (const z of [-.06, 0, .06]) box(ramp, [.06, .01, .008], rail, [0, .008, z], { outline: false });
+      trough(xR, -.34, toon('#f2c14e'));
+    } else if (kind === 'duck') {
+      // a big pond with lily pads and reeds, and an A-frame duck house
+      const p = node(B, [W - .24, .004, -.2]); mesh(G.cyl(.21, .21, .012, 32), water, { parent: p, scale: [1, 1, .62], outline: false }); mesh(G.torus(.21, .02, 6, 32), toon('#a7a39a'), { parent: p, rot: [Math.PI / 2, 0, 0], scale: [1, .62, 1] });
+      for (const [x, z] of [[-.08, .03], [.07, -.05]]) mesh(G.cyl(.035, .035, .006, 14), toon('#79b84a'), { parent: p, pos: [x, .01, z], outline: false });
+      for (const [x, z, h] of [[.12, -.11, .13], [.15, -.09, .1], [.09, -.12, .09]]) mesh(G.cyl(.006, .008, h, 5), toon('#6f9e3a'), { parent: p, pos: [x, h / 2, z], outline: false });
+      mesh(G.cyl(.13, .13, .22, 3), toon('#c77b3c'), { parent: B, pos: [xL, .065, -.36], rot: [-Math.PI / 2, 0, 0] }); box(B, [.07, .07, .01], dark, [xL, .035, -.249], { outline: false });
+    } else if (kind === 'cow') {
+      // red barn with white trim and an X-braced door, hay in the trough, a milk can
+      const b = node(B, [xL, 0, -.39]); box(b, [.32, .18, .22], toon('#b5432f'), [0, .09, 0]); gable(b, .15, .38, .255, shingles('#76574a', '#4f3a32'));
+      for (const x of [-.155, .155]) box(b, [.014, .18, .012], white, [x, .09, .111], { outline: false });
+      box(b, [.12, .13, .01], toon('#8a2f22'), [.04, .065, .112], { outline: false }); for (const a of [.82, -.82]) box(b, [.012, .17, .006], white, [.04, .065, .118], { rot: [0, 0, a], outline: false });
+      trough(xR, -.36, hay); const can = node(B, [xR + .02, 0, -.2]); mesh(G.cyl(.028, .032, .07, 14), toon('#c9ccd0'), { parent: can, pos: [0, .035, 0] }); mesh(G.cyl(.018, .018, .02, 12), toon('#9da1a6'), { parent: can, pos: [0, .08, 0] });
+    } else if (kind === 'goat') {
+      // thatched shed and a pile of rocks to climb
+      shed(xL); const rock = toon('#a39d92');
+      for (const [x, y, z, sx, sy, sz] of [[0, .04, -.34, .11, .07, .09], [-.09, .025, -.22, .07, .05, .06], [.02, .1, -.36, .07, .05, .06], [.09, .02, -.2, .05, .035, .045]]) mesh(G.sphereLo, rock, { parent: B, pos: [xR + x, y, z], scale: [sx, sy, sz] });
+    } else if (kind === 'sheep') {
+      // thatched shed and a stack of hay bales
+      shed(xL); for (const [x, y, z] of [[-.075, .035, -.34], [.075, .035, -.34], [0, .105, -.34], [.02, .035, -.2]]) box(B, [.14, .07, .09], thatch, [xR - .02 + x, y, z]);
+    } else {
+      // pig sty: lean-to roof on posts, a mud wallow and a water trough
+      const sty = node(B, [xL, 0, -.38]); box(sty, [.32, .12, .02], wood, [0, .06, -.1]); for (const x of [-.15, .15]) mesh(G.cyl(.014, .014, .17, 6), wood, { parent: sty, pos: [x, .085, .1] });
+      const roof = box(sty, [.36, .02, .28], toon('#7d5434'), [0, .16, 0]); roof.rotation.x = .3; for (const x of [-.1, 0, .1]) box(roof, [.008, .022, .28], rail, [x, .002, 0], { outline: false });
+      mesh(G.cyl(.17, .17, .006, 28), toon('#7a5235'), { parent: B, pos: [W - .26, .004, -.02], scale: [1, 1, .6], outline: false }); trough(xR, -.38, water);
+    }
+    back.dirty = front.dirty = true;
+  };
+  return {
+    k: 0,
+    update() { if (!back.canvas.offsetHeight) return; const k = Math.max(.85, back.canvas.offsetWidth / back.canvas.offsetHeight / 1.18); if (Math.abs(k - this.k) > .02) build(this.k = k) },
+    dispose() { front.dispose() }
+  };
+}
+
 // ---------- Still pictures (wardrobe, shoe shop, hair salon, profile picker, pet shop, lake, card table) ----------
 // Any element with data-c3d gets a 3D view of what it describes and its painted picture is hidden:
-//   char:<gender>:<outfit>:<hair>:<shoe>[:<pose>]   (pose: 'seat' frames head and shoulders, 'fish' sits with a rod)
+//   char:<gender>:<outfit>:<hair>:<shoe>[:<pose>[:<hat>]]   (pose: 'seat' frames head and shoulders, 'head' the head with room for a hat, 'fish' sits with a rod, 'sit' sits)
 //   animal:<kind>
+//   pen:<kind>   (barn pen; its rim takes the CSS --pen-accent colour)
 // Visible ones keep breathing, blinking and looking around.
 const FIT = { cow: .62, pig: .5, goat: .62, sheep: .55, chicken: .42, duck: .38, cat: .42, dog: .42, lion: .5, pigeon: .32 };
 const previews = new Map();
 function mountPreview(el) {
-  const spec = el.dataset.c3d, cur = previews.get(el); if (cur && cur.spec === spec) return; if (cur) cur.view.dispose();
+  if (!renderer) return; // no WebGL: keep the painted picture
+  const spec = el.dataset.c3d, cur = previews.get(el); if (cur && cur.spec === spec) return; if (cur) { cur.view.dispose(); cur.model.dispose?.() }
   const [type, ...a] = spec.split(':'); let view, model;
   try {
     if (type === 'char') {
-      const pose = a[4] || '', seat = pose === 'seat', fish = pose === 'fish';
-      view = new View(el, seat ? { zoom: .6, center: [0, .74], pitch: .2 } : fish ? { left: -.25, top: -.2, width: 1.9, height: 1.4, zoom: 1.5, center: [.4, .5], pitch: .3 } : { left: -.08, top: -.06, width: 1.16, height: 1.1, zoom: 1.24, center: [0, .54] });
-      model = new Character(view, { gender: a[0], outfit: a[1], hair: a[2], shoe: a[3] }); model.fixedYaw = fish ? .9 : seat ? .15 : .35; model.st.yaw = model.fixedYaw; if (fish) model.setPose('fish');
+      const pose = a[4] || '', seat = pose === 'seat' || pose === 'head', fish = pose === 'fish';
+      view = new View(el, pose === 'head' ? { zoom: .82, center: [0, .84], pitch: .2 } : seat ? { zoom: .6, center: [0, .74], pitch: .2 } : fish ? { left: -.25, top: -.2, width: 1.9, height: 1.4, zoom: 1.5, center: [.4, .5], pitch: .3 } : { left: -.08, top: -.06, width: 1.16, height: 1.1, zoom: 1.24, center: [0, .54] });
+      model = new Character(view, { gender: a[0], outfit: a[1], hair: a[2], shoe: a[3], hat: a[5] || undefined }); model.fixedYaw = el.dataset.yaw ? +el.dataset.yaw : fish ? .9 : pose === 'sit' ? .6 : seat ? .15 : .35; /* data-yaw: the way it was told to face */ model.st.yaw = model.fixedYaw; if (fish || pose === 'sit') model.setPose(pose);
     } else if (type === 'animal' && SPECIES[a[0]]) {
       const fit = (FIT[a[0]] || .5) * 1.25; view = new View(el, { left: -.1, top: -.1, width: 1.2, height: 1.2, zoom: fit * 1.2, center: [0, fit * .5] });
       model = new Animal(view, a[0]); model.st.yaw = model.st.yawTo = .65; model.fixedYaw = .65;
+    } else if (type === 'pen') {
+      const o = { zoom: 1, center: PEN.center, pitch: PEN.pitch }, accent = getComputedStyle(el).getPropertyValue('--pen-accent').trim() || '#c99a5e';
+      view = new View(el, { ...o, cls: 'w3d-view w3d-pen' }); model = penModel(view, new View(el, { ...o, cls: 'w3d-view w3d-pen-front' }), a[0], accent);
     } else return;
   } catch (e) { console.warn('3D preview failed', spec, e); return }
   model.update(1 / 60, {}); el.classList.add('c3d-on'); previews.set(el, { spec, view, model });
@@ -791,7 +1009,8 @@ let measureAt = 0, budget = PHONE ? 3 : 5, frameTimer = null, frameReq = null, r
 const LEVELS = [{ scale: 1, interval: 1, perFrame: 1 }, { scale: .8, interval: 1.4, perFrame: .75 }, { scale: .62, interval: 2, perFrame: .5 }];
 const QUALITY = { level: 0, scale: 1, interval: 1, perFrame: 1 };
 function setQuality(l) { Object.assign(QUALITY, LEVELS[l], { level: l }); const root = document.documentElement; if (root) root.dataset.w3dQuality = l }
-setQuality(WEAK && PHONE ? 1 : 0);
+// Phones start one step down (weak ones two) and never go back to the desktop level.
+const FLOOR = PHONE ? 1 : 0; setQuality(PHONE ? (WEAK ? 2 : 1) : 0);
 const playerActive = () => { for (const v of views) if (v.priority && v.active && !v.suspended) return true; return false };
 function scheduleFrame(){
   if(document.hidden||frameTimer!==null||frameReq!==null)return;
@@ -808,7 +1027,7 @@ function adaptQuality(now, active) {
   const slow = gapMs > 42 || renderMs > 9, fast = gapMs < 24 && renderMs < 3.5;
   slowFor = slow ? slowFor + gap : 0; fastFor = fast ? fastFor + gap : 0;
   if (slowFor > 1800 && QUALITY.level < LEVELS.length - 1) { setQuality(QUALITY.level + 1); slowFor = fastFor = 0; measureAt = 0 }
-  else if (fastFor > 8000 && QUALITY.level > 0 && !(WEAK && PHONE && QUALITY.level <= 1)) { setQuality(QUALITY.level - 1); slowFor = fastFor = 0; measureAt = 0 }
+  else if (fastFor > 8000 && QUALITY.level > FLOOR) { setQuality(QUALITY.level - 1); slowFor = fastFor = 0; measureAt = 0 }
 }
 function frame(now) {
   if(document.hidden)return;
@@ -825,6 +1044,6 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeo
 window.addEventListener('resize',()=>{measureAt=0});
 window.addEventListener('scroll',()=>{measureAt=0},{passive:true,capture:true});
 
-const World3D = renderer ? { QUALITY, setQuality, THREE, View, Character, Animal, SPECIES_OF, outfitSpec, views, walkPreview:(el,x,y)=>{const p=previews.get(el);if(p){p.walkUntil=performance.now()+900;p.model.steer?.(x,y)}}, render: v => v.render(), measure: v => v.measure() } : null;
+const World3D = renderer ? { QUALITY, setQuality, THREE, View, Character, Animal, SPECIES_OF, outfitSpec, views, walkPreview:(el,x,y)=>{const p=previews.get(el);if(p){p.walkUntil=performance.now()+900;p.model.steer?.(x,y)}}, face:(el,yaw)=>{const p=previews.get(el);if(p){p.model.fixedYaw=yaw;p.view.dirty=true}}, cheer:el=>previews.get(el)?.model.cheer?.(), act:(el,kind,dir)=>{const p=previews.get(el);if(!p)return;const m=p.model.move;if(!kind)p.model.move=null;else if(m?.kind!==kind||m.dir!==dir)p.model.move={kind,dir,t0:p.model.st.t}}, render: v => v.render(), measure: v => v.measure() } : null;
 if (World3D) { window.World3D = World3D; requestAnimationFrame(frame); window.dispatchEvent(new Event('world3d-ready')) }
 export default World3D;

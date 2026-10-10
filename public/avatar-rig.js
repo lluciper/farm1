@@ -303,7 +303,7 @@ const fisher=(look,label)=>charMarkup(look,{pose:'fish',cls:'lake-fisher',label,
 const asImg=(markup,alt='',cls='')=>`<img${cls?` class="${cls}"`:''} src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}" alt="${esc(alt)}">`;
 // Hair rule shared by every drawing of the player: modular outfits show the chosen hair, the classic outfits keep
 // the hair they were designed with (bob / short), exactly like the old artwork.
-const lookFor=o=>({gender:o.gender==='male'?'male':'female',outfit:o.outfit,hair:o.modular?o.hair:DEFAULT_HAIR[o.gender==='male'?'male':'female'],shoe:o.shoe==='bare'?'':o.shoe});
+const lookFor=o=>({gender:o.gender==='male'?'male':'female',outfit:o.outfit,hair:o.modular?o.hair:DEFAULT_HAIR[o.gender==='male'?'male':'female'],shoe:o.shoe==='bare'?'':o.shoe,hat:o.hat});
 const lookKey=l=>[l.gender==='male'?'male':'female',l.outfit,l.hair,l.shoe].join('|');
 // Static markup (wardrobe cards, profile picker, card room). avatar-world.js brings these to life (blink, breathe).
 function charMarkup(look,o={}){

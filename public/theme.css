@@ -605,13 +605,13 @@ img.goods-art{object-fit:contain}
 /* ---------- Barn: a grass yard where the six pens fill one screen ----------
    Each pen cell is a size container: the pen picture takes the largest 1.18:1 box that fits above the status chip,
    with the sign on its roof. The lawn uses the same warm greens as the grass painted around each pen. */
-.xom .barn-yard{display:flex;flex-direction:column;gap:6px;overflow:hidden;padding:10px 12px 10px;border:3px solid var(--xom-wood);border-radius:22px;background:radial-gradient(ellipse at 50% 45%,#0000 55%,#24400e38 100%),url("pens/grass-carpet.webp?v=1.0") 0 0/256px 256px #7cb447;box-shadow:inset 0 0 0 3px #f3d49a66,0 4px 0 #7a462040}
+.xom .barn-yard{display:flex;flex-direction:column;gap:6px;overflow:hidden;padding:10px 12px 10px;border:3px solid var(--xom-wood);border-radius:22px;background:radial-gradient(circle at 30% 40%,#a9783f38 0 1.5px,#0000 2.5px) 0 0/23px 19px,radial-gradient(circle at 70% 70%,#fff3d266 0 1.5px,#0000 2.5px) 0 0/31px 27px,radial-gradient(ellipse at 50% 45%,#0000 55%,#7a46202e 100%),linear-gradient(#ead1a0,#dcb985);box-shadow:inset 0 0 0 3px #f3d49a66,0 4px 0 #7a462040}
 .xom .barn-yard .yard-heading{flex:0 0 auto;align-items:center}
 .xom .barn-yard .yard-heading>div{background:var(--xom-paper);border:2px solid var(--xom-wood-light);border-radius:14px;padding:3px 14px 5px;box-shadow:var(--xom-shadow)}
 .xom .barn-yard .yard-heading h2{font-size:20px;line-height:1.15}
 .xom .barn-yard .yard-heading p{margin:0;font-size:12px}
 .xom .barn-yard .yard-heading button{box-shadow:var(--xom-shadow)}
-.xom .barn-yard .paddock-grid{flex:1 1 0;min-height:0;grid-template-rows:repeat(2,minmax(0,1fr));gap:4px 14px}
+.xom .barn-yard .paddock-grid{flex:1 1 0;min-height:0;grid-template-rows:repeat(2,minmax(0,1fr));gap:32px 44px;padding:12px 18px}
 /* --art-h: tallest pen picture that fits; --pad centres picture + chip vertically so the chip always hugs the pen. */
 /* Pens fill the width of their cell: when the cell is wider than the picture's 1.18:1, the picture is stretched
    sideways (up to 1.5x) instead of leaving lawn on both sides. */
@@ -628,13 +628,25 @@ img.goods-art{object-fit:contain}
 .xom .barn-yard .pen-hungry .pen-info small{color:#b4502f;font-weight:800}
 .xom .barn-yard .pen-ready .pen-info{background:#f0fadff5;border-color:var(--xom-leaf);animation:pen-ready 1.6s ease-in-out infinite}
 .xom .barn-yard .pen-ready .pen-info small{color:#3f7a1d;font-weight:800}
+/* Barn: a sandy yard the player walks across; each pen is a 3D model (world3d.js penModel) whose rim and sign share
+   its herd's colour, so the six pens read apart at a glance. Without WebGL the painted pens stay. */
+.paddock>.w3d-pen{z-index:-1}.paddock>.w3d-pen-front{z-index:399}
+.paddock.c3d-on>.herd,.paddock.c3d-on>.herd-more{visibility:visible}
+/* 3D pens are rebuilt to fit any box, so they may grow up to 1:1 (painted ones keep 1.18:1); the status chip tucks
+   over the pen's front rim instead of taking its own row. */
+.xom .barn-yard .paddock-button:has(>.paddock.c3d-on){--art-h:min(100cqw,calc(100cqh - var(--chip) * .45));--pad:calc((100cqh - var(--art-h) - var(--chip) * .45) / 2)}
+.xom .barn-yard .paddock-button:has(>.paddock.c3d-on) .pen-info{top:calc(var(--pad) + var(--art-h) - var(--chip) * .55)}
+.xom .barn-yard .paddock-button:hover .w3d-pen,.xom .barn-yard .paddock-button:focus-visible .w3d-pen{filter:brightness(1.06) drop-shadow(0 0 6px #fff6c8)}
+.xom .barn-yard .paddock-button>strong{background:color-mix(in srgb,var(--pen-accent) 24%,#fff8e8);border-color:var(--pen-accent)}
+.xom .barn-yard [data-key=chicken]{--pen-accent:#e39a2f}.xom .barn-yard [data-key=cow]{--pen-accent:#5f86c4}.xom .barn-yard [data-key=sheep]{--pen-accent:#a07ccf}
+.xom .barn-yard [data-key=duck]{--pen-accent:#2fa6bf}.xom .barn-yard [data-key=goat]{--pen-accent:#6fa63c}.xom .barn-yard [data-key=buffalo]{--pen-accent:#e07b98}
 @keyframes pen-ready{0%,100%{box-shadow:0 2px 0 #7a462033,0 0 0 0 #9ad35a00}50%{box-shadow:0 2px 0 #7a462033,0 0 0 5px #9ad35a77}}
 @media(max-width:650px){
 .xom .barn-yard{padding:8px 6px 6px;gap:4px;border-width:2px}
 .xom .barn-yard .yard-heading{flex-wrap:nowrap;align-items:center}
 .xom .barn-yard .yard-heading h2{font-size:17px}
 .xom .barn-yard .yard-heading p{display:none}
-.xom .barn-yard .paddock-grid{grid-template-rows:repeat(3,minmax(0,1fr));gap:2px 6px}
+.xom .barn-yard .paddock-grid{grid-template-rows:repeat(3,minmax(0,1fr));gap:24px 40px;padding:10px 12px}
 .xom .barn-yard .paddock-button{--chip:clamp(26px,17cqh,32px)}
 .xom .barn-yard .pen-info{padding:1px 7px 2px;border-radius:10px}
 }

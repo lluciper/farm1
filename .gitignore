@@ -50,3 +50,6 @@ tools/realesrgan/
 
 # Local build cache
 tsconfig.tsbuildinfo
+
+# graphify knowledge graph (generated locally: graphify update .)
+/graphify-out/

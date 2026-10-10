@@ -15,6 +15,7 @@ async function readTop(){
  json_extract(payload,'$.farm.wardrobe.equipped') AS outfit,
  json_extract(payload,'$.farm.appearance.hair') AS hair,
  json_extract(payload,'$.farm.footwear.equipped') AS shoe,
+ json_extract(payload,'$.farm.headwear.equipped') AS hat,
  updated FROM game_saves
  WHERE json_valid(payload) AND json_extract(payload,'$.farm.version')=3
  ORDER BY updated ASC,rowid ASC`).all();
